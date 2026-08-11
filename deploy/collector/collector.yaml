@@ -165,6 +165,15 @@ data:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, batch]
           exporters: [otlphttp/dynatrace]
+
+        # The EventPipe half arrives here. Without this pipeline the otlp receiver
+        # accepts no logs at all, and the agent's records vanish with no error on
+        # either side -- the agent reports success because the SDK queued them, and
+        # the collector never sees them. Cost an entire validation run to find.
+        logs/from-agent:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [otlphttp/dynatrace, debug]
 ---
 apiVersion: v1
 kind: Service

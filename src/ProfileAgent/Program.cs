@@ -31,6 +31,12 @@ var resource = ResourceBuilder.CreateDefault()
         ["telemetry.sdk.name"] = "otlp-dotnet-alpine-musl-profiler/profile-agent",
     });
 
+// Surface exporter failures. Without this the SDK swallows them into its own
+// diagnostic channel, so the agent happily reports "published N records" for
+// records that never left the process -- which is exactly what happened when the
+// collector had no logs pipeline to receive them.
+using var selfDiag = new OtelSelfDiagnostics(log);
+
 using var otelFactory = LoggerFactory.Create(b => b.AddOpenTelemetry(o =>
 {
     o.SetResourceBuilder(resource);
