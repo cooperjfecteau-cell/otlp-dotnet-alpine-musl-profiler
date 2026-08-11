@@ -23,6 +23,16 @@ data:
         # attribution at all.
         include_env_vars: "OTEL_SERVICE_NAME,OTEL_RESOURCE_ATTRIBUTES"
 
+      # Spans from the profiled application. Needed for the correlation story:
+      # profile samples join to spans in DQL on thread.id plus time window, so the
+      # spans have to exist in the same tenant.
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
     processors:
       memory_limiter:
         check_interval: 5s
@@ -150,6 +160,27 @@ data:
           receivers: [profilestologs]
           processors: [batch]
           exporters: [otlphttp/dynatrace, debug]
+
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [otlphttp/dynatrace]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dotnet-profiler-collector
+  namespace: dotnet-profiler
+spec:
+  selector:
+    app: dotnet-profiler-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
 ---
 # Active profiling sessions, written by the broker. Empty until one exists.
 #

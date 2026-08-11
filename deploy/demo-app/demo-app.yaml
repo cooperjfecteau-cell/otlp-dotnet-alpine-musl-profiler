@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dotnet-profiler-demo
+  namespace: dotnet-profiler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dotnet-profiler-demo
+  template:
+    metadata:
+      labels:
+        app: dotnet-profiler-demo
+    spec:
+      imagePullSecrets:
+        - name: ghcr
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: app
+          image: ghcr.io/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/demo-app:latest
+          ports:
+            - containerPort: 8080
+          env:
+            # The profiler reads this to attribute samples to a service. Without
+            # it every sample from this pod lands under the executable name.
+            - name: OTEL_SERVICE_NAME
+              value: dotnet-profiler-demo
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://dotnet-profiler-collector.dotnet-profiler.svc.cluster.local:4317
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: grpc
+            # Diagnostic socket shared with the dotnet-monitor sidecar (added in #19).
+            - name: DOTNET_DiagnosticPorts
+              value: /diag/dotnet-monitor.sock,nosuspend
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              # Deliberately generous. dotnet-monitor's BufferSizeInMB is charged
+              # against THIS container's limit, not the sidecar's, so a tight limit
+              # here means profiling can OOMKill the workload it is observing.
+              memory: 1Gi
+          volumeMounts:
+            - name: diag
+              mountPath: /diag
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+      volumes:
+        - name: diag
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dotnet-profiler-demo
+  namespace: dotnet-profiler
+spec:
+  selector:
+    app: dotnet-profiler-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
