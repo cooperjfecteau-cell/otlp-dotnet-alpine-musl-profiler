@@ -104,9 +104,9 @@ async Task RunSessionAsync(Session session, long nowNanos)
 
     try
     {
-        var samples = NettraceReader.Read(path, log);
-        Publish(samples, session, duration);
-        log.Info($"session {session.Id}: published {samples.Count} records");
+        var parsed = NettraceReader.Read(path, log);
+        var published = Publish(parsed, session, duration);
+        log.Info($"session {session.Id}: published {published} records");
     }
     finally
     {
@@ -114,38 +114,51 @@ async Task RunSessionAsync(Session session, long nowNanos)
     }
 }
 
-void Publish(IReadOnlyCollection<FoldedSample> samples, Session session, int durationSeconds)
+int Publish(ParsedTrace parsed, Session session, int durationSeconds)
 {
-    // The sampling interval EventPipe uses for the CPU sample profiler. Used to
-    // derive cpu_ns rather than leaving it at zero, which is the defect that made
-    // every duration-weighted query on the old pipeline silently return nothing.
-    const long sampleIntervalNanos = 1_000_000; // 1ms, the SampleProfiler default
+    // The SampleProfiler's interval. Used to derive cpu_ns rather than leaving it
+    // at zero, which is the defect that made every duration-weighted query on the
+    // old pipeline silently return nothing.
+    const long sampleIntervalNanos = 1_000_000; // 1ms
 
     var windowStart = session.StartUnixNano;
     var windowDuration = (long)durationSeconds * 1_000_000_000L;
+    var count = 0;
 
-    foreach (var s in samples)
+    // Attributes every record carries, whatever its type. Keeping these identical
+    // across event types is what lets one DQL query filter a whole session without
+    // knowing which producer or which signal it is looking at.
+    List<KeyValuePair<string, object?>> Common(string eventType) => new()
     {
-        var attrs = new List<KeyValuePair<string, object?>>
-        {
-            new("log.source", "continuous_profiler"),
-            new("profile.schema_version", "otlp-profiles-v1development/1"),
-            new("profile.stack.folded", s.Folded),
-            new("profile.stack.hash", s.Hash),
-            new("profile.stack.depth", s.Depth),
-            new("profile.sample_count", s.SampleCount),
-            new("profile.cpu_ns", s.SampleCount * sampleIntervalNanos),
-            new("profile.period_ns", sampleIntervalNanos),
-            new("profile.window_start_ns", windowStart),
-            new("profile.window_duration_ns", windowDuration),
-            new("profile.session_id", session.Id),
-            // The join key to the eBPF half. Same namespace on both sides (#8), so
-            // no managed-to-OS translation is needed or attempted.
-            new("thread.id", s.ThreadId),
-            // Distinguishes the two producers when comparing them in DQL. They are
-            // meant to agree; being able to check that is the point.
-            new("profile.source", "eventpipe"),
-        };
+        new("log.source", "continuous_profiler"),
+        new("profile.schema_version", "otlp-profiles-v1development/1"),
+        new("profile.session_id", session.Id),
+        new("profile.window_start_ns", windowStart),
+        new("profile.window_duration_ns", windowDuration),
+        // Distinguishes the two producers when comparing them in DQL. They are
+        // meant to agree on CPU; being able to check that is the point.
+        new("profile.source", "eventpipe"),
+        new("profile.event_type", eventType),
+    };
+
+    void Emit(List<KeyValuePair<string, object?>> attrs, string body)
+    {
+        records.Log(LogLevel.Information, default, attrs, null, (_, _) => body);
+        count++;
+    }
+
+    foreach (var s in parsed.CpuSamples)
+    {
+        var attrs = Common("cpu_sample");
+        attrs.Add(new("profile.stack.folded", s.Folded));
+        attrs.Add(new("profile.stack.hash", s.Hash));
+        attrs.Add(new("profile.stack.depth", s.Depth));
+        attrs.Add(new("profile.sample_count", s.SampleCount));
+        attrs.Add(new("profile.cpu_ns", s.SampleCount * sampleIntervalNanos));
+        attrs.Add(new("profile.period_ns", sampleIntervalNanos));
+        // The join key to the eBPF half. Same namespace on both sides (#8), so no
+        // managed-to-OS translation is needed or attempted.
+        attrs.Add(new("thread.id", s.ThreadId));
 
         if (s.Truncated)
         {
@@ -153,8 +166,46 @@ void Publish(IReadOnlyCollection<FoldedSample> samples, Session session, int dur
             attrs.Add(new("profile.stack.original_depth", s.OriginalDepth));
         }
 
-        records.Log(LogLevel.Information, default, attrs, null, static (_, _) => "profile sample");
+        Emit(attrs, "profile sample");
     }
+
+    // Everything below is what eBPF structurally cannot produce. It sees a thread
+    // parked and can say nothing about why; these say why.
+
+    foreach (var gc in parsed.GarbageCollections)
+    {
+        var attrs = Common("gc");
+        attrs.Add(new("gc.generation", gc.Generation));
+        attrs.Add(new("gc.reason", gc.Reason));
+        attrs.Add(new("gc.kind", gc.Kind));
+        attrs.Add(new("gc.duration_ns", gc.DurationNs));
+        attrs.Add(new("profile.event_offset_ms", gc.TimestampMs));
+        Emit(attrs, $"gc gen{gc.Generation} {gc.Reason}");
+    }
+
+    foreach (var c in parsed.Contentions)
+    {
+        var attrs = Common("contention");
+        attrs.Add(new("contention.duration_ns", c.DurationNs));
+        // The waiting stack, folded the same way CPU samples are, so contention
+        // can be rendered as a flame graph on the same machinery.
+        attrs.Add(new("profile.stack.folded", c.Folded));
+        attrs.Add(new("profile.stack.hash", c.Hash));
+        attrs.Add(new("thread.id", c.ThreadId));
+        attrs.Add(new("profile.event_offset_ms", c.TimestampMs));
+        Emit(attrs, "lock contention");
+    }
+
+    foreach (var a in parsed.Allocations)
+    {
+        var attrs = Common("allocation");
+        attrs.Add(new("allocation.type", a.TypeName));
+        attrs.Add(new("allocation.bytes", a.Bytes));
+        attrs.Add(new("allocation.tick_count", a.Ticks));
+        Emit(attrs, $"allocation {a.TypeName}");
+    }
+
+    return count;
 }
 
 
