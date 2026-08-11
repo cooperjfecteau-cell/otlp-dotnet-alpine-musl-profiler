@@ -29,18 +29,6 @@ jobs:
         working-directory: connector/profilestologsconnector
         run: go mod tidy
 
-      - name: Upload resolved go.mod/go.sum
-        # The pinned versions in go.mod are inferred from the upstream manifest, not
-        # verified. Whatever tidy resolves is the truth; publish it so the pins can
-        # be corrected without another guess-and-push cycle.
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: resolved-gomod
-          path: |
-            connector/profilestologsconnector/go.mod
-            connector/profilestologsconnector/go.sum
-
       - name: Vet
         working-directory: connector/profilestologsconnector
         run: go vet ./...
@@ -52,6 +40,18 @@ jobs:
       - name: Build
         working-directory: connector/profilestologsconnector
         run: go build ./...
+
+      - name: Print resolved versions
+        # Echoed to the log rather than uploaded as an artifact: this account's
+        # Actions artifact storage quota is exhausted, and an upload failure was
+        # aborting the job before the steps that actually matter had run.
+        if: always()
+        working-directory: connector/profilestologsconnector
+        run: |
+          echo "----- go.mod -----"
+          cat go.mod
+          echo "----- direct requires resolved -----"
+          go list -m all | head -40
 
   # Stage 2 assembles the full distribution. Runs even when stage 1 fails, so one
   # push surfaces problems in both the connector and the manifest rather than
@@ -88,7 +88,10 @@ jobs:
           }
 
       - name: Upload binary
+        # Non-fatal: artifact storage quota on this account is exhausted, and a
+        # failed upload must not mask a successful build.
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: otelcol-dotnet-profiler

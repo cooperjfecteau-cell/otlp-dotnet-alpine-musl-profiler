@@ -39,7 +39,11 @@ processors:
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor v0.158.0
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.158.0
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.158.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.158.0
+  # filterprocessor is deliberately absent. Adding it produced a linker failure --
+  # its generic instantiations against pkg/ottl did not resolve alongside the
+  # versions the profiler receiver pins. Upstream's manifest omits it too, and we
+  # do not need it: session gating lives in the connector, and transformprocessor
+  # covers the scoping we do want.
 
 receivers:
   - gomod: go.opentelemetry.io/collector/receiver/nopreceiver v0.158.0
