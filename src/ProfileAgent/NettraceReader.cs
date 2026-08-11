@@ -88,6 +88,25 @@ internal static class NettraceReader
                     TimestampMs: start.TimeStampRelativeMSec));
             };
 
+            // ContentionStop carries the DURATION but no call stack; ContentionStart
+            // carries the stack that entered the wait. Pairing them by thread is the
+            // only way to answer "which call path blocked, and for how long".
+            //
+            // Reading the stack off ContentionStop alone yields an empty string for
+            // every event, which then collapses every record into a single null-hash
+            // group. The durations still look correct, so the failure is invisible
+            // until you try to render it.
+            var pendingContention = new Dictionary<int, (string Folded, string Hash)>();
+
+            source.Clr.ContentionStart += data =>
+            {
+                if (data.ContentionFlags != ContentionFlags.Managed) return;
+                var (folded, _) = Folding.Fold(data.CallStack());
+                if (folded.Length == 0) return;
+                var (cut, _) = Folding.Truncate(folded);
+                pendingContention[data.ThreadID] = (cut, Folding.Hash(folded));
+            };
+
             source.Clr.ContentionStop += data =>
             {
                 // Only blocking contention is interesting. A spin that resolved
@@ -97,9 +116,23 @@ internal static class NettraceReader
 
                 contentionEvents++;
 
-                var (folded, _) = Folding.Fold(data.CallStack());
-                var (cut, _) = Folding.Truncate(folded);
-                var hash = Folding.Hash(folded);
+                string cut;
+                string hash;
+                if (pendingContention.Remove(data.ThreadID, out var started))
+                {
+                    cut = started.Folded;
+                    hash = started.Hash;
+                }
+                else
+                {
+                    // No paired start -- the wait began before the trace did, or the
+                    // provider gave no stack. Keep the record rather than dropping
+                    // it: the duration is still the finding, and a labelled bucket
+                    // is honest where a silently missing one is not.
+                    cut = "(contention, no stack captured)";
+                    hash = Folding.Hash(cut);
+                }
+
                 var key = (hash, data.ThreadID);
 
                 if (!contentions.TryGetValue(key, out var group))

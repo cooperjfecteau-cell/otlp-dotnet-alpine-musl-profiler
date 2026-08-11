@@ -1,0 +1,200 @@
+2026-08-11T19:11:23.213Z DEBUG [PLUGIN] Searching for configuration file
+2026-08-11T19:11:38.257Z DEBUG [PLUGIN] Searching for configuration file
+2026-08-11T19:11:38.258Z DEBUG [PLUGIN] Found C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\app.config.json
+2026-08-11T19:11:38.394Z DEBUG [TELEMETRY] Initializing telemetry
+2026-08-11T19:11:38.394Z DEBUG [TELEMETRY] Using telemetry endpoint https://bf96767wvv.bf.dynatrace.com/mbeacon
+2026-08-11T19:11:38.587Z DEBUG [TELEMETRY] Creating a new HTTP and HTTPS interceptor for tracing
+2026-08-11T19:11:38.587Z DEBUG [TELEMETRY] Successfully initialized OpenKit
+2026-08-11T19:11:38.588Z DEBUG [TELEMETRY] Telemetry enabled: Session ID "719297046994652800"
+2026-08-11T19:11:38.589Z DEBUG [TELEMETRY] Identification successful
+2026-08-11T19:11:49.823Z DEBUG [BUILD_TIME] Built UI in 6841.7253ms.
+2026-08-11T19:11:49.826Z DEBUG [BUILD_TIME] Built in 10738.7087ms.
+2026-08-11T19:11:49.827Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\main.js (723.21 KB)
+2026-08-11T19:11:49.827Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\main.css (399.47 KB)
+2026-08-11T19:11:49.827Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\index.html (0.51 KB)
+2026-08-11T19:11:49.832Z DEBUG [TELEMETRY] Closing OpenKit connection
+2026-08-11T19:11:49.898Z DEBUG [TELEMETRY] Successfully closed OpenKit connection
+2026-08-11T19:12:00.495Z DEBUG [PLUGIN] Searching for configuration file
+2026-08-11T19:12:00.496Z DEBUG [PLUGIN] Found C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\app.config.json
+2026-08-11T19:12:00.564Z DEBUG [TELEMETRY] Initializing telemetry
+2026-08-11T19:12:00.564Z DEBUG [TELEMETRY] Using telemetry endpoint https://bf96767wvv.bf.dynatrace.com/mbeacon
+2026-08-11T19:12:00.643Z DEBUG [TELEMETRY] Creating a new HTTP and HTTPS interceptor for tracing
+2026-08-11T19:12:00.643Z DEBUG [TELEMETRY] Successfully initialized OpenKit
+2026-08-11T19:12:00.643Z DEBUG [TELEMETRY] Telemetry enabled: Session ID "237540701588785820"
+2026-08-11T19:12:00.644Z DEBUG [TELEMETRY] Identification successful
+2026-08-11T19:12:04.471Z DEBUG [BUILD_TIME] Built UI in 570.3798000000006ms.
+2026-08-11T19:12:04.474Z DEBUG [BUILD_TIME] Built in 3394.1590000000006ms.
+2026-08-11T19:12:04.474Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\main.js (723.21 KB)
+2026-08-11T19:12:04.474Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\main.css (399.47 KB)
+2026-08-11T19:12:04.474Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\index.html (0.51 KB)
+2026-08-11T19:12:04.492Z DEBUG [PLATFORM_DEPENDENCIES] 
+Dynatrace Platform Dependencies
+@dynatrace-sdk\client-state\ /platform/state/v1
+@dynatrace-sdk\client-davis-analyzers\ /platform/davis/analyzers/v1
+@dynatrace-sdk\client-document\ /platform/document/v1
+@dynatrace-sdk\client-query\ /platform/storage/query/v1
+@dynatrace-sdk\client-app-settings\ /platform/app-settings/v1
+@dynatrace-sdk\client-app-settings-v2\ /platform/app-settings/v2
+@dynatrace-sdk\client-iam\ /platform/iam/v1
+
+2026-08-11T19:12:04.492Z DEBUG [LIBRARY_DEPENDENCIES] 
+Dynatrace Library Dependencies
+@dynatrace/strato-components@3.9.0
+@dynatrace-sdk/user-preferences@1.1.4
+@dynatrace-sdk/units@1.5.0
+@dynatrace-sdk/error-handlers@1.3.1
+@dynatrace-sdk/http-client@1.5.1
+@dynatrace-sdk/shared-errors@1.0.2
+@dynatrace-sdk/app-environment@1.1.4
+@dynatrace-sdk/client-state@1.9.3
+@dynatrace/strato-design-tokens@1.6.0
+@dynatrace/strato-icons@2.4.0
+@dynatrace-sdk/client-davis-analyzers@1.10.0
+@dynatrace-sdk/react-hooks@1.14.2
+@dynatrace-sdk/client-document@1.31.1
+@dynatrace-sdk/client-query@1.26.0
+@dynatrace-sdk/app-utils@1.0.2
+@dynatrace-sdk/client-app-settings@1.9.8
+@dynatrace-sdk/client-app-settings-v2@1.1.7
+@dynatrace-sdk/client-iam@1.0.0
+
+2026-08-11T19:12:04.493Z DEBUG [AUTH] Retrieving SSO-URL for environment 'https://YOUR-TENANT.apps.dynatrace.com'
+2026-08-11T19:12:04.493Z DEBUG [HTTP(S)] Execute GET request without allowing redirection to 'https://YOUR-TENANT.apps.dynatrace.com/platform/oauth2/authorization/dynatrace-sso'
+2026-08-11T19:12:04.758Z DEBUG [HTTP(S)] Resolved URL is https://sso.dynatrace.com/action/signin?goto=https%3A%2F%2Fsso.dynatrace.com%3A443%2Foauth2%2Fauthorize%2Fredirect%3FoAuth2CtxUuid%3D78657cf9-742d-4f3a-b6c3-ba05893d6aaf&oAuth2RedirectUri=https%3A%2F%2FYOUR-TENANT.apps.dynatrace.com%2Fplatform%2Flogin%2Foauth2%2Fcode%2Fdynatrace-sso
+2026-08-11T19:12:04.758Z DEBUG [AUTH] Using SSO-URL 'https://sso.dynatrace.com'
+2026-08-11T19:12:04.759Z DEBUG [AUTH] Authenticate with Dynatrace SSO
+2026-08-11T19:12:05.607Z DEBUG [AUTH] SSO-link https://sso.dynatrace.com/oauth2/authorize?client_id=dt0s08.dt-app-local&redirect_uri=http%3A%2F%2Flocalhost%3A5343%2Fauth%2Flogin&state=e27053c15121d2b03cb8aaaf21b8ad8a1b23a4cd&response_type=code&code_challenge_method=S256&code_challenge=8VfBOeoOp7jbtCwGo5CKuqFu9mca7hITYQg2SUoVvE8
+2026-08-11T19:12:06.468Z DEBUG [AUTH] Received authorized code for oAuth
+2026-08-11T19:12:06.633Z DEBUG [AUTH] Retrieving SSO-URL for environment 'https://YOUR-TENANT.apps.dynatrace.com'
+2026-08-11T19:12:06.633Z DEBUG [HTTP(S)] Found resolved URL in cache: https://sso.dynatrace.com/action/signin?goto=https%3A%2F%2Fsso.dynatrace.com%3A443%2Foauth2%2Fauthorize%2Fredirect%3FoAuth2CtxUuid%3D78657cf9-742d-4f3a-b6c3-ba05893d6aaf&oAuth2RedirectUri=https%3A%2F%2FYOUR-TENANT.apps.dynatrace.com%2Fplatform%2Flogin%2Foauth2%2Fcode%2Fdynatrace-sso
+2026-08-11T19:12:06.633Z DEBUG [AUTH] Using SSO-URL 'https://sso.dynatrace.com'
+2026-08-11T19:12:06.635Z DEBUG [DEPLOY] Installing the app
+2026-08-11T19:12:07.113Z DEBUG [DEPLOY] App installed
+2026-08-11T19:12:10.449Z DEBUG [STRATO_COMPONENTS] Detected 31 strato component instances, 0 via wrapper packages
+2026-08-11T19:12:10.454Z DEBUG [TELEMETRY] Closing OpenKit connection
+2026-08-11T19:12:10.502Z DEBUG [TELEMETRY] Successfully closed OpenKit connection
+2026-08-11T19:19:46.240Z DEBUG [PLUGIN] Searching for configuration file
+2026-08-11T19:19:46.241Z DEBUG [PLUGIN] Found C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\app.config.json
+2026-08-11T19:19:46.309Z DEBUG [TELEMETRY] Initializing telemetry
+2026-08-11T19:19:46.309Z DEBUG [TELEMETRY] Using telemetry endpoint https://bf96767wvv.bf.dynatrace.com/mbeacon
+2026-08-11T19:19:46.414Z DEBUG [TELEMETRY] Creating a new HTTP and HTTPS interceptor for tracing
+2026-08-11T19:19:46.414Z DEBUG [TELEMETRY] Successfully initialized OpenKit
+2026-08-11T19:19:46.414Z DEBUG [TELEMETRY] Telemetry enabled: Session ID "324694466394614400"
+2026-08-11T19:19:46.416Z DEBUG [TELEMETRY] Identification successful
+2026-08-11T19:19:50.199Z DEBUG [BUILD_TIME] Built UI in 553.5995000000003ms.
+2026-08-11T19:19:50.201Z DEBUG [BUILD_TIME] Built in 3351.0722ms.
+2026-08-11T19:19:50.202Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\main.js (723.59 KB)
+2026-08-11T19:19:50.202Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\main.css (399.47 KB)
+2026-08-11T19:19:50.202Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\index.html (0.51 KB)
+2026-08-11T19:19:50.224Z DEBUG [PLATFORM_DEPENDENCIES] 
+Dynatrace Platform Dependencies
+@dynatrace-sdk\client-state\ /platform/state/v1
+@dynatrace-sdk\client-davis-analyzers\ /platform/davis/analyzers/v1
+@dynatrace-sdk\client-document\ /platform/document/v1
+@dynatrace-sdk\client-query\ /platform/storage/query/v1
+@dynatrace-sdk\client-app-settings\ /platform/app-settings/v1
+@dynatrace-sdk\client-app-settings-v2\ /platform/app-settings/v2
+@dynatrace-sdk\client-iam\ /platform/iam/v1
+
+2026-08-11T19:19:50.224Z DEBUG [LIBRARY_DEPENDENCIES] 
+Dynatrace Library Dependencies
+@dynatrace/strato-components@3.9.0
+@dynatrace-sdk/user-preferences@1.1.4
+@dynatrace-sdk/units@1.5.0
+@dynatrace-sdk/error-handlers@1.3.1
+@dynatrace-sdk/http-client@1.5.1
+@dynatrace-sdk/shared-errors@1.0.2
+@dynatrace-sdk/app-environment@1.1.4
+@dynatrace-sdk/client-state@1.9.3
+@dynatrace/strato-design-tokens@1.6.0
+@dynatrace/strato-icons@2.4.0
+@dynatrace-sdk/client-davis-analyzers@1.10.0
+@dynatrace-sdk/react-hooks@1.14.2
+@dynatrace-sdk/client-document@1.31.1
+@dynatrace-sdk/client-query@1.26.0
+@dynatrace-sdk/app-utils@1.0.2
+@dynatrace-sdk/client-app-settings@1.9.8
+@dynatrace-sdk/client-app-settings-v2@1.1.7
+@dynatrace-sdk/client-iam@1.0.0
+
+2026-08-11T19:19:50.224Z DEBUG [AUTH] Retrieving SSO-URL for environment 'https://YOUR-TENANT.apps.dynatrace.com'
+2026-08-11T19:19:50.224Z DEBUG [HTTP(S)] Execute GET request without allowing redirection to 'https://YOUR-TENANT.apps.dynatrace.com/platform/oauth2/authorization/dynatrace-sso'
+2026-08-11T19:19:50.438Z DEBUG [HTTP(S)] Resolved URL is https://sso.dynatrace.com/action/signin?goto=https%3A%2F%2Fsso.dynatrace.com%3A443%2Foauth2%2Fauthorize%2Fredirect%3FoAuth2CtxUuid%3D6c6f5df5-0201-4e32-8da4-44ee29b6a18f&oAuth2RedirectUri=https%3A%2F%2FYOUR-TENANT.apps.dynatrace.com%2Fplatform%2Flogin%2Foauth2%2Fcode%2Fdynatrace-sso
+2026-08-11T19:19:50.438Z DEBUG [AUTH] Using SSO-URL 'https://sso.dynatrace.com'
+2026-08-11T19:19:50.440Z DEBUG [AUTH] OAuth2 token expired with a value of: -164.44 seconds
+2026-08-11T19:19:50.937Z DEBUG [AUTH] Retrieving SSO-URL for environment 'https://YOUR-TENANT.apps.dynatrace.com'
+2026-08-11T19:19:50.937Z DEBUG [HTTP(S)] Found resolved URL in cache: https://sso.dynatrace.com/action/signin?goto=https%3A%2F%2Fsso.dynatrace.com%3A443%2Foauth2%2Fauthorize%2Fredirect%3FoAuth2CtxUuid%3D6c6f5df5-0201-4e32-8da4-44ee29b6a18f&oAuth2RedirectUri=https%3A%2F%2FYOUR-TENANT.apps.dynatrace.com%2Fplatform%2Flogin%2Foauth2%2Fcode%2Fdynatrace-sso
+2026-08-11T19:19:50.937Z DEBUG [AUTH] Using SSO-URL 'https://sso.dynatrace.com'
+2026-08-11T19:19:50.938Z DEBUG [DEPLOY] Installing the app
+2026-08-11T19:19:51.089Z DEBUG [APP-REGISTRY] Failed to install the app
+HTTP 400 Bad Request
+
+Cannot install app with version 0.1.0 because the same version is already installed with a different checksum.
+{
+  "code": 400,
+  "message": "Cannot install app with version 0.1.0 because the same version is already installed with a different checksum."
+}
+2026-08-11T19:19:51.090Z ERROR Error: Failed to install the app
+HTTP 400 Bad Request
+
+Cannot install app with version 0.1.0 because the same version is already installed with a different checksum.
+
+2026-08-11T19:19:51.090Z DEBUG [TELEMETRY] Reporting error cause
+2026-08-11T19:19:51.090Z DEBUG [TELEMETRY] Closing OpenKit connection
+2026-08-11T19:19:51.106Z DEBUG [TELEMETRY] Successfully closed OpenKit connection
+2026-08-11T19:20:00.812Z DEBUG [PLUGIN] Searching for configuration file
+2026-08-11T19:20:00.813Z DEBUG [PLUGIN] Found C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\app.config.json
+2026-08-11T19:20:00.881Z DEBUG [TELEMETRY] Initializing telemetry
+2026-08-11T19:20:00.881Z DEBUG [TELEMETRY] Using telemetry endpoint https://bf96767wvv.bf.dynatrace.com/mbeacon
+2026-08-11T19:20:00.969Z DEBUG [TELEMETRY] Creating a new HTTP and HTTPS interceptor for tracing
+2026-08-11T19:20:00.969Z DEBUG [TELEMETRY] Successfully initialized OpenKit
+2026-08-11T19:20:00.969Z DEBUG [TELEMETRY] Telemetry enabled: Session ID "638068721767201900"
+2026-08-11T19:20:00.971Z DEBUG [TELEMETRY] Identification successful
+2026-08-11T19:20:04.680Z DEBUG [BUILD_TIME] Built UI in 532.7367000000004ms.
+2026-08-11T19:20:04.682Z DEBUG [BUILD_TIME] Built in 3264.5724ms.
+2026-08-11T19:20:04.683Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\main.js (723.59 KB)
+2026-08-11T19:20:04.683Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\main.css (399.47 KB)
+2026-08-11T19:20:04.683Z DEBUG [FILES] CREATED: C:\Users\Cooper\Documents\Projects\Work\otlp_dotnet_alpine_musl_profiler\app\profile-viewer\dist\ui\index.html (0.51 KB)
+2026-08-11T19:20:04.703Z DEBUG [PLATFORM_DEPENDENCIES] 
+Dynatrace Platform Dependencies
+@dynatrace-sdk\client-state\ /platform/state/v1
+@dynatrace-sdk\client-davis-analyzers\ /platform/davis/analyzers/v1
+@dynatrace-sdk\client-document\ /platform/document/v1
+@dynatrace-sdk\client-query\ /platform/storage/query/v1
+@dynatrace-sdk\client-app-settings\ /platform/app-settings/v1
+@dynatrace-sdk\client-app-settings-v2\ /platform/app-settings/v2
+@dynatrace-sdk\client-iam\ /platform/iam/v1
+
+2026-08-11T19:20:04.703Z DEBUG [LIBRARY_DEPENDENCIES] 
+Dynatrace Library Dependencies
+@dynatrace/strato-components@3.9.0
+@dynatrace-sdk/user-preferences@1.1.4
+@dynatrace-sdk/units@1.5.0
+@dynatrace-sdk/error-handlers@1.3.1
+@dynatrace-sdk/http-client@1.5.1
+@dynatrace-sdk/shared-errors@1.0.2
+@dynatrace-sdk/app-environment@1.1.4
+@dynatrace-sdk/client-state@1.9.3
+@dynatrace/strato-design-tokens@1.6.0
+@dynatrace/strato-icons@2.4.0
+@dynatrace-sdk/client-davis-analyzers@1.10.0
+@dynatrace-sdk/react-hooks@1.14.2
+@dynatrace-sdk/client-document@1.31.1
+@dynatrace-sdk/client-query@1.26.0
+@dynatrace-sdk/app-utils@1.0.2
+@dynatrace-sdk/client-app-settings@1.9.8
+@dynatrace-sdk/client-app-settings-v2@1.1.7
+@dynatrace-sdk/client-iam@1.0.0
+
+2026-08-11T19:20:04.703Z DEBUG [AUTH] Retrieving SSO-URL for environment 'https://YOUR-TENANT.apps.dynatrace.com'
+2026-08-11T19:20:04.703Z DEBUG [HTTP(S)] Execute GET request without allowing redirection to 'https://YOUR-TENANT.apps.dynatrace.com/platform/oauth2/authorization/dynatrace-sso'
+2026-08-11T19:20:04.904Z DEBUG [HTTP(S)] Resolved URL is https://sso.dynatrace.com/action/signin?goto=https%3A%2F%2Fsso.dynatrace.com%3A443%2Foauth2%2Fauthorize%2Fredirect%3FoAuth2CtxUuid%3D155d3e89-c6a0-4609-8337-ede6731ce5d7&oAuth2RedirectUri=https%3A%2F%2FYOUR-TENANT.apps.dynatrace.com%2Fplatform%2Flogin%2Foauth2%2Fcode%2Fdynatrace-sso
+2026-08-11T19:20:04.904Z DEBUG [AUTH] Using SSO-URL 'https://sso.dynatrace.com'
+2026-08-11T19:20:05.311Z DEBUG [AUTH] Retrieving SSO-URL for environment 'https://YOUR-TENANT.apps.dynatrace.com'
+2026-08-11T19:20:05.311Z DEBUG [HTTP(S)] Found resolved URL in cache: https://sso.dynatrace.com/action/signin?goto=https%3A%2F%2Fsso.dynatrace.com%3A443%2Foauth2%2Fauthorize%2Fredirect%3FoAuth2CtxUuid%3D155d3e89-c6a0-4609-8337-ede6731ce5d7&oAuth2RedirectUri=https%3A%2F%2FYOUR-TENANT.apps.dynatrace.com%2Fplatform%2Flogin%2Foauth2%2Fcode%2Fdynatrace-sso
+2026-08-11T19:20:05.311Z DEBUG [AUTH] Using SSO-URL 'https://sso.dynatrace.com'
+2026-08-11T19:20:05.314Z DEBUG [DEPLOY] Installing the app
+2026-08-11T19:20:05.771Z DEBUG [DEPLOY] App installed
+2026-08-11T19:20:08.785Z DEBUG [STRATO_COMPONENTS] Detected 32 strato component instances, 0 via wrapper packages
+2026-08-11T19:20:08.788Z DEBUG [TELEMETRY] Closing OpenKit connection
+2026-08-11T19:20:08.824Z DEBUG [TELEMETRY] Successfully closed OpenKit connection

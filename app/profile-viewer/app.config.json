@@ -1,0 +1,19 @@
+{
+  "environmentUrl": "https://YOUR-TENANT.apps.dynatrace.com/",
+  "app": {
+    "name": "Profile Viewer",
+    "version": "0.1.1",
+    "description": "Flame graphs for .NET profiling sessions on Alpine/musl containers.",
+    "id": "my.profiler.viewer",
+    "scopes": [
+      {
+        "name": "storage:logs:read",
+        "comment": "Profile records are ingested as OTLP logs; Dynatrace does not ingest the profiles signal yet"
+      },
+      {
+        "name": "storage:buckets:read",
+        "comment": "Required alongside storage:*:read"
+      }
+    ]
+  }
+}

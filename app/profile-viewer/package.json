@@ -1,0 +1,46 @@
+{
+  "name": "profile-viewer",
+  "version": "0.1.0",
+  "description": "Flame graphs for .NET profiling sessions captured on Alpine/musl",
+  "scripts": {
+    "build": "dt-app build",
+    "start": "dt-app dev",
+    "deploy": "dt-app deploy",
+    "update": "dt-app update",
+    "info": "dt-app info",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=16.13.0"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@dynatrace-sdk/app-environment": "^1.1.4",
+    "@dynatrace-sdk/client-query": "^1.25.0",
+    "@dynatrace-sdk/react-hooks": "^1.14.1",
+    "@dynatrace-sdk/units": "^1.4.0",
+    "@dynatrace/strato-components": "3.9.0",
+    "@dynatrace/strato-design-tokens": "^1.5.0",
+    "@dynatrace/strato-icons": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-intl": "6.6.2",
+    "react-router-dom": "^6.22.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@types/node": "^24.7.0",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.5",
+    "dt-app": "1.13.1",
+    "eslint": "^9.37.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^6.1.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "@swc/core@1.15.47": true
+  }
+}
