@@ -48,6 +48,7 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
 - [Research — attribute vs body limits](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/27) — measured against the tenant: **attributes cap at exactly 32,768 chars, body at ≥524,287**. #3 was right, #6 was wrong. **Truncation is silent** — oversized attributes ingest successfully and are simply cut, so the deepest stacks vanish invisibly. Folded stack goes in `profile.stack.folded` (attribute) with a mandatory exporter-side guard at 30,000 chars setting `profile.stack.truncated`
 - [Build — Alpine/musl .NET demo workload](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/17) — **the central claim is proven end to end.** A live ASP.NET Core app on `aspnet:9.0-alpine`/arm64 yielded a complete 46-frame managed stack: thread pool → Kestrel → async state machines → our lambda → all twelve `DeepStack` levels → `SHA256.HashData` → `libcrypto`. Session gating validated at the same time by opening a real session — 3,218 records, one session, one service, nothing else admitted from ~112 processes on the node
 - [Build — eBPF DaemonSet](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/20) and [collector pipeline](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/21) — deployed to `dotnet-profiler` namespace and **validated against real profile data**. Ours emits folded stacks, stack hashes, `thread.id` and non-zero `cpu_ns` on 100% of records where the existing pipeline emits none of them, with per-process `service.name` instead of one constant. Three findings the deploy caught that review did not: the receiver needs debugfs and tracefs **mounted into the container** (privileged alone fails to start, not degrade); `include_env_vars` is required or `service.name` is null everywhere; and a `transform` declaring only `profile_statements` on a logs pipeline **silently does nothing** — enrichment now runs once upstream of the connectors
+- [Prototype — broker API](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/14) — `docs/broker-api.md`. The broker got *smaller*: it does not start eBPF (samples flow continuously, it only opens a gate) and cannot stop a trace early (dotnet-monitor yields no usable nettrace if terminated). **Concurrency settled: idempotent on `problemEventId`, and at most one active session per pod (409 otherwise)** — the unit is the pod because that is where the overhead is, since `BufferSizeInMB` is charged to the *application's* memory limit. A global lock was rejected: unrelated services share no EventPipe overhead
 - **Headline claim: sidecar-led** — the reference implementation's claim is "a complete
   on-demand profiling pipeline with managed-code depth", not "zero-instrumentation CPU
   profiling". eBPF proved sufficient for CPU frames in #7, but the artifact's centrepiece is
@@ -86,11 +87,9 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
   the connector watches (natural fan-out, eventually consistent), an HTTP control endpoint per
   pod (immediate, but the broker must enumerate pods), or a CRD. Sharpen once the broker API
   is prototyped in #14.
-- **Broker authentication** — how a Dynatrace workflow proves it may start a profile.
+- **Broker authentication** — the one part of the API left undecided. How a Dynatrace workflow proves it may start a profile.
   Shared secret, OAuth client, or mTLS. Sharp enough to ticket once the broker API shape
   is prototyped.
-- **Concurrent and overlapping sessions** — what happens when a second profile is
-  triggered on a pod already being profiled. Reject, queue, or join?
 - **Sampling overhead** — the cost of EventPipe collection on the profiled process, which
   needs measuring before anyone can be told it's safe for production. Sharpened by #4:
   `BufferSizeInMB` is charged to the *application's* memory limit, not the sidecar's, so

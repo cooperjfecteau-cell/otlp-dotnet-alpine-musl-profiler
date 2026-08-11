@@ -112,11 +112,38 @@ credential, or mTLS. Whatever is chosen, the endpoint mutates cluster state and 
 billable ingest, so it cannot be left unauthenticated the way `dotnet-monitor`'s own API is
 (that one is bound to localhost and reachable only by the sidecar).
 
-## Open question for the reviewer
+## Concurrency: one session per pod
 
-**Should `POST /sessions` be idempotent on `problemEventId`?** A Dynatrace workflow can retry,
-and a problem that re-opens can fire again. Without idempotency you get several overlapping
-sessions for one problem, each paying full ingest. With it, you cannot deliberately profile
-the same problem twice. My inclination is to make it idempotent within a short window — say,
-reject a new session for the same `problemEventId` while one is still `collecting` — and
-return the existing session's 202 body instead.
+Settled. Two rules, and they exist for different reasons.
+
+**Idempotent on `problemEventId`.** While a session for a given problem is `collecting`, a
+second `POST` carrying the same `problemEventId` returns **the existing session's 202 body**
+rather than starting another. Workflows retry, and a re-opened problem fires again; without
+this, one problem quietly spawns several overlapping sessions each paying full ingest.
+
+**At most one active session per pod.** A `POST` targeting a pod that is already `collecting`
+is rejected with **409 Conflict**, carrying the conflicting `sessionId` and its
+`expectedReadyAt` so the caller knows when it could retry.
+
+The unit is the **pod**, not the cluster, because that is where the overhead actually lives:
+
+- **eBPF gating costs nothing additional.** Those samples flow continuously regardless; the
+  gate only decides whether they ship. Two gates open at once is not two profilers running.
+- **EventPipe is the real overhead**, and it is per-process. `BufferSizeInMB` is charged
+  against the *application* container's memory limit, not the sidecar's (#4), so two
+  concurrent traces on one pod double the memory pressure on the workload being observed —
+  the OOMKill risk, twice over.
+
+A global one-at-a-time lock was considered and rejected: two unrelated services share no
+EventPipe overhead, so serialising them would block legitimate investigations for no benefit.
+
+If a cluster-wide cap is ever wanted it should be justified by **ingest cost**, not overhead,
+and configured as an explicit maximum rather than implied by the concurrency rule — the two
+concerns have different right answers and should not be conflated in one setting.
+
+### What this means when a session is refused
+
+A 409 is not a failure to report to the user as an error. The workflow should treat it as
+"already being profiled", and the annotation pushed on the *existing* session already carries
+the deep link the second trigger would have produced. Pushing a second annotation for the same
+window would just duplicate the comment on the problem.
