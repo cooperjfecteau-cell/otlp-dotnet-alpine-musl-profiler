@@ -1,0 +1,111 @@
+# Profiling broker: the one endpoint a Dynatrace workflow calls.
+#
+# Its only cluster privilege is rewriting a single ConfigMap. That is the entire
+# activation mechanism -- both the eBPF connector and the EventPipe agent watch
+# that file -- so the broker needs no pod exec, no port-forward, and no ability to
+# reach dotnet-monitor.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: profiler-broker
+  namespace: dotnet-profiler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: profiler-broker
+  namespace: dotnet-profiler
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    # Scoped to the one ConfigMap it owns. A broker that can rewrite arbitrary
+    # ConfigMaps in the namespace is a much larger blast radius than this job needs.
+    resourceNames: ["profiler-sessions"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: profiler-broker
+  namespace: dotnet-profiler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: profiler-broker
+subjects:
+  - kind: ServiceAccount
+    name: profiler-broker
+    namespace: dotnet-profiler
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: profiler-broker
+  namespace: dotnet-profiler
+spec:
+  # Deliberately one. Concurrency rules (idempotency, one session per service) are
+  # enforced in memory, so a second replica would enforce nothing -- two replicas
+  # could each admit a session for the same service. Making this HA means moving
+  # that state into the ConfigMap itself with optimistic concurrency, which is a
+  # real change rather than a replica count.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: profiler-broker
+  template:
+    metadata:
+      labels:
+        app: profiler-broker
+    spec:
+      serviceAccountName: profiler-broker
+      imagePullSecrets:
+        - name: ghcr
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: broker
+          image: ghcr.io/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/broker:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PROFILER_NAMESPACE
+              value: dotnet-profiler
+            - name: PROFILER_SESSION_CONFIGMAP
+              value: profiler-sessions
+            - name: PROFILER_VIEWER_URL
+              valueFrom:
+                secretKeyRef: { name: dynatrace, key: DT_PLATFORM_URL, optional: true }
+            - name: DT_ENDPOINT
+              valueFrom:
+                secretKeyRef: { name: dynatrace, key: DT_ENDPOINT }
+            - name: DT_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: dynatrace, key: DT_API_TOKEN }
+            - name: BROKER_TOKEN
+              valueFrom:
+                secretKeyRef: { name: broker-auth, key: BROKER_TOKEN }
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: profiler-broker
+  namespace: dotnet-profiler
+spec:
+  selector:
+    app: profiler-broker
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
