@@ -34,7 +34,7 @@ inspected frame by frame.
 | | |
 |---|---|
 | Cluster | `eks-arm-new`, EKS 1.31 (`v1.31.14-eks-8f14419`), us-east-1 |
-| Node used | `ip-192-168-44-91.ec2.internal`, t4g.large |
+| Node used | `ip-10-0-0-1.ec2.internal`, t4g.large |
 | Arch / kernel | aarch64, `6.1.176-221.360.amzn2023.aarch64` |
 | OS / runtime | Amazon Linux 2023.12.20260710, containerd 2.2.4 |
 | Prereqs | `/sys/kernel/btf/vmlinux` present, tracefs present, `perf_event_paranoid=2`, `unprivileged_bpf_disabled=1` → ran `privileged: true` |
@@ -133,7 +133,7 @@ apiVersion: v1
 kind: Pod
 metadata: { name: ebpf-build, namespace: probe-ebpf }
 spec:
-  nodeName: ip-192-168-44-91.ec2.internal
+  nodeName: ip-10-0-0-1.ec2.internal
   hostPID: true
   hostNetwork: true
   dnsPolicy: ClusterFirstWithHostNet

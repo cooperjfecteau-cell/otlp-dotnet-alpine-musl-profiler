@@ -16,6 +16,12 @@ data:
         # The existing DaemonSet runs at 19. Kept identical so a side-by-side
         # comparison against it is measuring the connector, not the sample rate.
         samples_per_second: 19
+        # Without this, service.name resolves to null on every record: the
+        # transform below reads process.environment_variable.OTEL_SERVICE_NAME,
+        # and the receiver does not collect env vars unless asked. Verified the
+        # hard way -- the first run produced correct stacks with no service
+        # attribution at all.
+        include_env_vars: "OTEL_SERVICE_NAME,OTEL_RESOURCE_ATTRIBUTES"
 
     processors:
       memory_limiter:
@@ -86,11 +92,11 @@ data:
         resource_marker:
           dt.openpipeline.source: dotnet-profiler
         gating:
-          # DISABLED for the initial validation run only, so output can be compared
-          # against the existing pipeline without waiting for a broker that does not
-          # exist yet. Must be flipped back to true before this is left running --
-          # ungated per-stack export is the expensive tier.
-          enabled: false
+          # Validation is done, so this is back on. With no active session the
+          # per-stack tier emits nothing; the metrics tier keeps running and is what
+          # covers the pre-problem window. To validate again, flip to false briefly
+          # rather than leaving it off.
+          enabled: true
           session_file: /etc/profiler-sessions/sessions.json
           reload_interval: 5s
 
@@ -99,7 +105,9 @@ data:
         # PROTOBUF-ONLY endpoint. application/json returns 415 even with a valid
         # OTLP payload -- measured. This exporter emits protobuf natively, which is
         # why export goes through the collector rather than hand-rolled HTTP.
-        endpoint: "https://YOUR-TENANT.live.dynatrace.com/api/v2/otlp"
+        # Tenant comes from the secret, never the manifest -- a tenant id in a
+        # tracked file is an identifier published to whoever can read the repo.
+        endpoint: "${env:DT_ENDPOINT}/api/v2/otlp"
         headers:
           Authorization: "Api-Token ${env:DT_API_TOKEN}"
         retry_on_failure:
@@ -120,18 +128,27 @@ data:
         logs:
           level: info
       pipelines:
+        # Enrichment happens HERE, upstream of the connectors, so both tiers
+        # inherit identical resource attributes from one place.
+        #
+        # It was originally on the two downstream pipelines instead, which silently
+        # did nothing: transform/service_name declares profile_statements, and a
+        # logs pipeline needs log_statements. No error, no warning -- service.name
+        # was simply null on every record. Enriching before the fan-out avoids the
+        # whole class of mistake and removes the duplication.
         profiles:
           receivers: [profiling]
+          processors: [memory_limiter, k8sattributes, transform/service_name, resource/cluster]
           exporters: [profilingmetrics, profilestologs]
 
         metrics/from-profiles:
           receivers: [profilingmetrics]
-          processors: [memory_limiter, k8sattributes, transform/service_name, resource/cluster, batch]
+          processors: [batch]
           exporters: [otlphttp/dynatrace, debug]
 
         logs/from-profiles:
           receivers: [profilestologs]
-          processors: [memory_limiter, k8sattributes, transform/service_name, resource/cluster, batch]
+          processors: [batch]
           exporters: [otlphttp/dynatrace, debug]
 ---
 # Active profiling sessions, written by the broker. Empty until one exists.
@@ -162,6 +179,11 @@ spec:
         app: dotnet-profiler-collector
     spec:
       serviceAccountName: dotnet-profiler-collector
+      # The GHCR package carries its own visibility, independent of the repository's.
+      # Keeping the pull secret means package visibility can change either way
+      # without breaking the next node that joins the cluster.
+      imagePullSecrets:
+        - name: ghcr
       # The profiler resolves processes by PID across the whole node, so it needs
       # the host PID namespace to see anything but itself.
       hostPID: true
@@ -191,6 +213,11 @@ spec:
                 secretKeyRef:
                   name: dynatrace
                   key: DT_API_TOKEN
+            - name: DT_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: dynatrace
+                  key: DT_ENDPOINT
             - name: GOMEMLIMIT
               value: "400MiB"
           resources:
@@ -204,6 +231,27 @@ spec:
               mountPath: /etc/collector
             - name: sessions
               mountPath: /etc/profiler-sessions
+            # The profiler attaches tracepoints (sched_process_free among them) and
+            # fails to START, not degrade, without debugfs and tracefs -- privileged
+            # alone is not enough, the filesystems must be mounted into the
+            # container. This is the single most likely thing for an adopter to miss.
+            - name: sys-kernel-debug
+              mountPath: /sys/kernel/debug
+            - name: sys-kernel-tracing
+              mountPath: /sys/kernel/tracing
+            - name: sys-fs-bpf
+              mountPath: /sys/fs/bpf
+            - name: sys-fs-cgroup
+              mountPath: /sys/fs/cgroup
+              readOnly: true
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            # Lets the profiler resolve a PID back to its container, which is what
+            # makes k8sattributes able to attach pod identity to a sample.
+            - name: containerd-sock
+              mountPath: /run/containerd/containerd.sock
+              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -211,3 +259,22 @@ spec:
         - name: sessions
           configMap:
             name: profiler-sessions
+        - name: sys-kernel-debug
+          hostPath:
+            path: /sys/kernel/debug
+        - name: sys-kernel-tracing
+          hostPath:
+            path: /sys/kernel/tracing
+        - name: sys-fs-bpf
+          hostPath:
+            path: /sys/fs/bpf
+        - name: sys-fs-cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: containerd-sock
+          hostPath:
+            path: /run/containerd/containerd.sock
+            type: Socket
