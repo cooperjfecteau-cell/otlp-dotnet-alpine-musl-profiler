@@ -19,3 +19,7 @@ dist/
 # OS
 Thumbs.db
 .DS_Store
+
+# dt-app local build cache and tokens - machine-specific, never shared
+app/*/.dt-app/
+app/*/dist/
