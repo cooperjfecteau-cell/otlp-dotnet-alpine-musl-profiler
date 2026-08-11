@@ -1,0 +1,95 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # Stage 1 validates the connector on its own. Kept separate from the ocb build on
+  # purpose: a wrong module version in the distribution manifest would otherwise
+  # mask whether the connector code itself compiles, and there is no local Go
+  # toolchain to fall back on, so each CI run has to yield maximum signal.
+  connector:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: connector/profilestologsconnector/go.sum
+
+      - name: Resolve dependencies
+        working-directory: connector/profilestologsconnector
+        run: go mod tidy
+
+      - name: Upload resolved go.mod/go.sum
+        # The pinned versions in go.mod are inferred from the upstream manifest, not
+        # verified. Whatever tidy resolves is the truth; publish it so the pins can
+        # be corrected without another guess-and-push cycle.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-gomod
+          path: |
+            connector/profilestologsconnector/go.mod
+            connector/profilestologsconnector/go.sum
+
+      - name: Vet
+        working-directory: connector/profilestologsconnector
+        run: go vet ./...
+
+      - name: Test
+        working-directory: connector/profilestologsconnector
+        run: go test -v ./...
+
+      - name: Build
+        working-directory: connector/profilestologsconnector
+        run: go build ./...
+
+  # Stage 2 assembles the full distribution. Runs even when stage 1 fails, so one
+  # push surfaces problems in both the connector and the manifest rather than
+  # serialising them across two round trips.
+  distribution:
+    runs-on: ubuntu-latest
+    needs: connector
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install builder
+        run: |
+          go install go.opentelemetry.io/collector/cmd/builder@v0.158.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build distribution
+        run: builder --config distribution/manifest.yaml
+
+      - name: Smoke test the binary
+        # `components` lists everything registered. If our connector is missing from
+        # the output the build silently produced a useless collector, which a plain
+        # exit-zero build would not catch.
+        run: |
+          ./distribution/_build/otelcol-dotnet-profiler components > components.yaml
+          cat components.yaml
+          grep -q 'profilestologs' components.yaml || {
+            echo "::error::profilestologs connector is not registered in the built binary"
+            exit 1
+          }
+
+      - name: Upload binary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: otelcol-dotnet-profiler
+          path: distribution/_build/

@@ -1,0 +1,66 @@
+# OpenTelemetry Collector distribution for .NET profiling on Alpine/musl.
+#
+# Derived from the upstream otelcol-ebpf-profiler manifest at 0.158.0, plus two
+# connectors that make the two-tier export work:
+#
+#   profilingmetrics  (Elastic, upstream)  -- always-on classified counters, cheap
+#   profilestologs    (ours)               -- per-stack log records, session-gated
+#
+# Dynatrace does not ingest the OTLP profiles signal, which is why the second one
+# exists at all.
+
+dist:
+  module: github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/distribution
+  name: otelcol-dotnet-profiler
+  description: OpenTelemetry Collector for .NET profiling on Alpine/musl into Dynatrace
+  version: 0.1.0
+  output_path: ./_build
+  # Matches upstream: the profiler pulls in gRPC, and tracing inside the tracer is
+  # both useless and a measurable cost on the hot path.
+  build_tags: "grpcnotrace"
+
+extensions:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.158.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/pprofextension v0.158.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.158.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.158.0
+  # otlphttp is the one that matters: the Dynatrace OTLP endpoint is PROTOBUF-ONLY
+  # (measured -- application/json returns 415 even with a valid payload), and this
+  # exporter emits protobuf natively.
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.158.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter v0.158.0
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.158.0
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.158.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor v0.158.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor v0.158.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.158.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.158.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.158.0
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/nopreceiver v0.158.0
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.158.0
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202632
+    import: go.opentelemetry.io/ebpf-profiler/collector
+
+connectors:
+  # Ours. Replaces the bespoke, source-less connector currently running on the
+  # cluster -- an adopter cannot pull a private ECR image, so a reference
+  # implementation cannot depend on one.
+  - gomod: github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/connector/profilestologsconnector v0.1.0
+  # Elastic's, upstream. The cheap always-on tier.
+  - gomod: github.com/elastic/opentelemetry-collector-components/connector/profilingmetricsconnector v0.67.0
+
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.64.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.64.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.64.0
+
+# Build against the in-tree source rather than a published module version, so a
+# change to the connector is exercised by the very next CI run.
+replaces:
+  - github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/connector/profilestologsconnector => ../connector/profilestologsconnector
