@@ -53,14 +53,18 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
   inlined frames.
 - [Decision — EventPipe keeps CPU collection](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/30) — both halves collect CPU. Redundancy is **bounded by the session window** once export is gated, so the cost objection largely dissolves, and a sidecar-led claim needs the A/B comparison to justify the sidecar rather than assert it
 - [Decision — `dotnet-monitor` sidecar](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/28) — glibc, documented as intentional. A sidecar-led story is exactly the case where dotnet-monitor's trigger rules, egress providers and auth get used, and adopters can verify a Microsoft artifact independently. The app image stays Alpine; the boundary is a Unix socket, not an ABI
-- **eBPF exports continuously; cost control comes from scoping and rate, not gating** —
-  reversed after costing it out. The dominant cost driver is that the DaemonSet profiles the
-  whole *node*, so a static collector filter on target `service.name` plus a deliberate sample
-  rate (19 Hz vs 99 Hz is ~5x) captures most of the saving with no new component. Session
-  gating would only recover the remainder, and it cost the **pre-problem window** — with
-  continuous export, a profile covers the lead-up to a problem rather than the aftermath,
-  which is usually where the answer is. Gating is documented as an adopter-scale lever, not
-  built here
+- **Two-tier export: metrics always-on, per-stack logs gated to sessions** — the shape that
+  resolves the cost/coverage tradeoff instead of trading one for the other. Elastic's
+  `profilingmetricsconnector` emits classified counters (`samples.kernel.count`,
+  `samples.native.count`, per-runtime, with syscall/shlib/kernel-area attributes) at a tiny
+  fraction of per-stack volume, so it runs continuously and preserves a **pre-problem triage
+  signal**. The expensive per-stack log records are emitted only during a workflow-triggered
+  session. Metrics tell you *where* to look; logs tell you *what the call path was*.
+- **Gating lives inside our connector, not a separate gateway** — the objection that sank
+  [#31](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/31) was
+  that gating needed a new hot-path component. Since #32 builds a profiles→logs connector
+  anyway, session-awareness folds into it. Cost control still also uses the static levers:
+  scoping to target `service.name` and a deliberate sample rate (19 Hz vs 99 Hz is ~5x)
 - **Retention: 7 days, pay-per-query** — settled directly by the owner after #6 showed
   *Retain with Included Queries* has a 10-day minimum and costs 28.6x on storage. Profiling is
   write-heavy and read-light, so paying 28.6x to make the cheap half free is the wrong trade.
@@ -75,14 +79,11 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
 
 ## Not yet specified
 
-- **An always-on metrics layer as the real cost control** — Elastic's
-  `profilingmetricsconnector` turns stacktraces into classified counters
-  (`samples.kernel.count`, `samples.native.count`, `samples.go.count`, attributes for
-  syscall, shared library, kernel area) at a tiny fraction of per-stack log volume. A hybrid —
-  continuous cheap metrics for *where* to look, on-demand expensive logs for *what the call
-  path was* — would deliver the cost control session gating was meant to provide, without
-  sacrificing the pre-problem window, and it exists upstream rather than needing to be built.
-  Needs a decision.
+- **How the connector learns a session is active** — gating is decided, the control path is
+  not. The connector runs as a DaemonSet, so the broker must reach every node: a ConfigMap
+  the connector watches (natural fan-out, eventually consistent), an HTTP control endpoint per
+  pod (immediate, but the broker must enumerate pods), or a CRD. Sharpen once the broker API
+  is prototyped in #14.
 - **Broker authentication** — how a Dynatrace workflow proves it may start a profile.
   Shared secret, OAuth client, or mTLS. Sharp enough to ticket once the broker API shape
   is prototyped.
@@ -105,9 +106,9 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
 - **Native OTLP profiles ingest** — Dynatrace does not ingest the profiles signal today.
   The schema is deliberately modelled on the OTLP profiles alpha so this becomes a
   transport swap later, but the swap itself is a future effort.
-- **Session gateway for gated eBPF export** — [#31](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/31), ruled out after costing it. Scoping and
-  sample rate deliver most of the same saving from static config, and gating sacrifices the
-  pre-problem window. The design is preserved on the closed ticket as the scale-up lever for
-  adopters who need it.
+- **A standalone session gateway service** — [#31](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/31). Gating itself came back once the
+  always-on metrics tier removed its cost to coverage, but it is implemented *inside* the
+  connector in #32 rather than as a separate hot-path service. The standalone-service design
+  on #31 stays out of scope.
 - **OneAgent comparison / benchmarking** — interesting, not on the route.
 - **Windows containers** and **a local Docker build loop** — deliberately excluded.
