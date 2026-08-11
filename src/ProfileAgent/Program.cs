@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using OpenTelemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 using ProfileAgent;
@@ -31,11 +30,6 @@ var resource = ResourceBuilder.CreateDefault()
         ["k8s.node.name"] = cfg.NodeName,
         ["telemetry.sdk.name"] = "otlp-dotnet-alpine-musl-profiler/profile-agent",
     });
-
-using var loggerProvider = Sdk.CreateLoggerProviderBuilder()
-    .SetResourceBuilder(resource)
-    .AddOtlpExporter()
-    .Build();
 
 using var otelFactory = LoggerFactory.Create(b => b.AddOpenTelemetry(o =>
 {

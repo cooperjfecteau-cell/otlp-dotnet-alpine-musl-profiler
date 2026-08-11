@@ -1,3 +1,14 @@
+# The profiled workload, with the EventPipe half attached.
+#
+# Three containers, and the libc situation is worth reading before changing anything:
+#
+#   app            Alpine / musl   — the thing being profiled
+#   dotnet-monitor Azure Linux / glibc — no musl image exists past 7.3.4 (#4)
+#   profile-agent  Alpine / musl   — TraceEvent works on musl/arm64 (#8)
+#
+# They do not need matching libc. dotnet-monitor reaches the app over a Unix socket
+# carrying the diagnostic IPC protocol — a byte stream, not an ABI — and the agent
+# reaches dotnet-monitor over HTTP on localhost.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,21 +28,58 @@ spec:
         - name: ghcr
       nodeSelector:
         kubernetes.io/arch: arm64
+
+      # Native sidecars (initContainers with restartPolicy: Always), stable since
+      # k8s 1.29 and this cluster is 1.31. Used for the ordering guarantee: in
+      # Listen mode the runtime dials OUT to the socket, so dotnet-monitor must own
+      # it before the app starts, or the app's first connection attempt finds
+      # nothing there.
+      initContainers:
+        - name: dotnet-monitor
+          image: mcr.microsoft.com/dotnet/monitor:10.0.3
+          restartPolicy: Always
+          args: ["collect", "--no-auth"]
+          env:
+            # The sidecar LISTENS and the runtime connects to it. This is not a
+            # choice: `listen` in DOTNET_DiagnosticPorts is Mono-on-mobile only, so
+            # on CoreCLR the runtime can only ever dial out (#4).
+            - name: DOTNETMONITOR_DiagnosticPort__ConnectionMode
+              value: Listen
+            - name: DOTNETMONITOR_DiagnosticPort__EndpointName
+              value: /diag/dotnet-monitor.sock
+            # Bound to localhost only. --no-auth is acceptable precisely because
+            # nothing outside this pod can reach it; the authenticated surface is
+            # the broker, not this.
+            - name: DOTNETMONITOR_Urls
+              value: http://127.0.0.1:52323
+            - name: DOTNETMONITOR_Storage__DefaultSharedPath
+              value: /diag
+          volumeMounts:
+            - name: diag
+              mountPath: /diag
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+
       containers:
         - name: app
           image: ghcr.io/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/demo-app:latest
           ports:
             - containerPort: 8080
           env:
-            # The profiler reads this to attribute samples to a service. Without
-            # it every sample from this pod lands under the executable name.
             - name: OTEL_SERVICE_NAME
               value: dotnet-profiler-demo
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: http://dotnet-profiler-collector.dotnet-profiler.svc.cluster.local:4317
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
               value: grpc
-            # Diagnostic socket shared with the dotnet-monitor sidecar (added in #19).
+            # `nosuspend` is load-bearing. The default when the modifier is omitted
+            # is `suspend`, which makes the runtime block at startup waiting for a
+            # diagnostic client — turning a sidecar crashloop into an application
+            # outage. This is the most dangerous default in the whole design.
             - name: DOTNET_DiagnosticPorts
               value: /diag/dotnet-monitor.sock,nosuspend
           resources:
@@ -39,26 +87,67 @@ spec:
               cpu: 200m
               memory: 256Mi
             limits:
-              # Deliberately generous. dotnet-monitor's BufferSizeInMB is charged
-              # against THIS container's limit, not the sidecar's, so a tight limit
-              # here means profiling can OOMKill the workload it is observing.
+              # Generous on purpose: dotnet-monitor's BufferSizeInMB is charged
+              # against THIS container's limit, not the sidecar's (#4). A tight
+              # limit here means profiling OOMKills the workload it is observing,
+              # and nothing in the failure would point at the profiler.
               memory: 1Gi
           volumeMounts:
             - name: diag
               mountPath: /diag
           readinessProbe:
-            httpGet:
-              path: /healthz
-              port: 8080
+            httpGet: { path: /healthz, port: 8080 }
             initialDelaySeconds: 3
           livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 8080
+            httpGet: { path: /healthz, port: 8080 }
             initialDelaySeconds: 10
+
+        - name: profile-agent
+          image: ghcr.io/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/profile-agent:latest
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: dotnet-profiler-demo
+            - name: DOTNET_MONITOR_URL
+              value: http://127.0.0.1:52323
+            - name: PROFILER_SESSION_FILE
+              value: /etc/profiler-sessions/sessions.json
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://dotnet-profiler-collector.dotnet-profiler.svc.cluster.local:4317
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: grpc
+            - name: PROFILER_BUFFER_MB
+              value: "128"
+            - name: K8S_POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: K8S_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - name: K8S_NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+          volumeMounts:
+            - name: sessions
+              mountPath: /etc/profiler-sessions
+            - name: work
+              mountPath: /var/tmp/profiles
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              # TraceEvent parsing is the memory-hungry step in this container.
+              memory: 512Mi
+
       volumes:
         - name: diag
           emptyDir: {}
+        - name: sessions
+          configMap:
+            name: profiler-sessions
+        - name: work
+          emptyDir:
+            # TraceLog writes an intermediate .etlx at roughly 9x the nettrace size
+            # (#8). Sized for a 90s trace with headroom; running out here fails in a
+            # way that looks nothing like disk exhaustion.
+            sizeLimit: 2Gi
 ---
 apiVersion: v1
 kind: Service
