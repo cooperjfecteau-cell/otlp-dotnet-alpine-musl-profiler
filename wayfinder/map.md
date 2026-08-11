@@ -31,7 +31,18 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
 
 ## Decisions so far
 
-- [Charter — design decisions settled during charting](#) — 28 questions resolved across four grilling rounds; the full record of what was chosen and why
+<!-- Source of truth for the map body is THIS FILE. Always push it with
+     `gh issue edit 1 --body-file wayfinder/map.md`. Do not round-trip the body
+     through `gh issue view --jq`: that returns an array of lines, and writing it
+     back collapses every newline to a space. -->
+
+- [Charter — design decisions settled during charting](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/2) — 28 questions resolved across four grilling rounds; the full record of what was chosen and why
+- [Task — create the GitHub repo and scaffold tracker config](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/10) — private repo created; GitHub sub-issues and native dependencies both confirmed working
+- [Task — provision the EKS cluster](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/11) — `eks-arm-new` in us-east-1, arm64/AL2023/kernel 6.1, BTF and tracefs verified present; arm64 widens the musl risk on #7/#8/#9
+- [Research — OTLP profiles alpha data model](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/3) — mirrors opentelemetry-proto v1.10.0 (v1.11.0 differs only in docs); **record grain corrected to one per unique (stack, thread) per window** so a record *is* an OTLP Sample; `Stack.location_indices` is leaf-first and must be reversed; null trace/span is the model's own defined null (`link_index: 0`)
+- [Research — Dynatrace event APIs](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/5) — one endpoint for both (`POST /api/v2/events/ingest`, scope `events.ingest`); **attaching a Davis event to a problem does not exist** — the real mechanism is `CUSTOM_ANNOTATION` carrying `annotation.problem_ids`, idempotent on `annotation.id`
+- [Research — Grail bucket, retention, and cost](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/6) — **a record cannot select its own bucket**; routing is an OpenPipeline Storage-stage `bucketAssignment` with two independent match points. ~$0.0006 per 90s single-pod profile; ingest is 94% of the bill and unbounded queries are the tail risk
+- [Research — dotnet-monitor on Alpine](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/4) — **no musl image exists past 7.3.4**; the sidecar runs glibc deliberately, which is sound because the app boundary is a Unix socket carrying diagnostic IPC, not an ABI. Sidecar must be the listener (CoreCLR can only dial out); `nosuspend` is load-bearing; `durationSeconds` must be set up front
 
 ## Not yet specified
 
@@ -41,7 +52,12 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
 - **Concurrent and overlapping sessions** — what happens when a second profile is
   triggered on a pod already being profiled. Reject, queue, or join?
 - **Sampling overhead** — the cost of EventPipe collection on the profiled process, which
-  needs measuring before anyone can be told it's safe for production.
+  needs measuring before anyone can be told it's safe for production. Sharpened by #4:
+  `BufferSizeInMB` is charged to the *application's* memory limit, not the sidecar's, so
+  profiling can OOMKill the workload it is observing. 128 MB is a guess pending measurement.
+- **Retention vs. included queries** — the owner asked for an "included query bucket", but
+  *Retain with Included Queries* carries a 10-day minimum, so it is mutually exclusive with
+  the chosen 7-day retention, and costs 28.6x on storage. Needs an explicit call.
 - **CI/CD for Alpine image builds** — GitHub Actions is the assumed path (no local Docker
   by choice), but the workflow shape isn't pinned.
 - **DaemonSet RBAC and privilege scope** — the least privilege the eBPF profiler can run
