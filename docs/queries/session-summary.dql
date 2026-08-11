@@ -1,0 +1,25 @@
+// Everything a session header needs, in one query.
+//
+// Reference session returned: 6,441 records, 2.8M samples, 3,039,036 cpu-ms
+// (cumulative across 53 threads), 724 GCs totalling 756.7 ms, and 9,135 lock waits
+// totalling 60,877.5 ms.
+//
+// The lock figure is the one worth showing prominently: 60.9 seconds of blocked
+// wait in a ~220 second window is the kind of number that explains a latency
+// problem on its own, and eBPF alone cannot produce it.
+
+fetch logs, from:-3h
+| filter profile.session_id == "$SESSION_ID"
+| summarize records    = count(),
+            samples    = sum(toLong(profile.sample_count)),
+            cpu_ms     = round(sum(toLong(profile.cpu_ns)) / 1000000.0, decimals: 0),
+            gc_count   = countIf(profile.event_type == "gc"),
+            gc_ms      = round(sum(toLong(gc.duration_ns)) / 1000000.0, decimals: 1),
+            lock_waits = sum(toLong(contention.count)),
+            lock_ms    = round(sum(toLong(contention.total_duration_ns)) / 1000000.0, decimals: 1),
+            threads    = countDistinctExact(thread.id),
+            // Non-zero means stacks were cut at 30,000 chars and the graph
+            // under-represents deep paths. The viewer must say so rather than
+            // rendering it silently.
+            truncated  = countIf(profile.stack.truncated == "true"),
+            by:{service.name}

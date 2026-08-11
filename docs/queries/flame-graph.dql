@@ -1,0 +1,34 @@
+// Flame graph input for one profiling session.
+//
+// The viewer builds the tree client-side from folded strings; DQL's job is to
+// return the smallest set of (path, weight) pairs that reconstructs it. Building
+// the tree in DQL would mean recursive splitting -- awkward, and expensive on a
+// signal billed by bytes scanned.
+//
+// Measured on a real session: 400 rows, 40.9 MB scanned, 51 ms, and those 400
+// stacks carry 99.94% of total sample weight (2,802,250 of 2,803,906). The limit
+// is therefore not meaningfully lossy.
+//
+// Two things that will waste your afternoon if you do not know them:
+//   - takeFirst() will not wrap an expression. takeFirst(toLong(x)) returns ZERO
+//     ROWS rather than erroring.
+//   - dtctl spills results over 50 KB to a file, so `result.records` is empty and
+//     `result.path` holds the data. Use --spill=never when reading it inline.
+//
+// IMPORTANT for interpretation: EventPipe's SampleProfiler is a WALL-CLOCK sampler.
+// It samples every thread, including parked ones, so idle thread-pool threads
+// dominate raw weight -- on the reference session the top stack was
+// LowLevelLifoSemaphore.WaitNative at 28% of all samples, doing nothing at all.
+// A flame graph rendered from unfiltered weight shows "waiting" as the hotspot and
+// buries the real work. See idle-filter below.
+
+fetch logs, from:-3h
+| filter profile.session_id == "$SESSION_ID"
+| filter isNotNull(profile.stack.folded)
+| summarize samples = sum(toLong(profile.sample_count)),
+            folded  = takeFirst(profile.stack.folded),
+            source  = takeFirst(profile.source),
+            kind    = takeFirst(profile.event_type),
+            by:{profile.stack.hash}
+| sort samples desc
+| limit 400
