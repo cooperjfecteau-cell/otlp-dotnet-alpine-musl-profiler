@@ -1,0 +1,21 @@
+# Local agent settings — machine-specific, not shared
+.claude/settings.local.json
+
+# Secrets
+.env
+*.pem
+*.key
+kubeconfig
+
+# .NET
+bin/
+obj/
+*.user
+
+# Node
+node_modules/
+dist/
+
+# OS
+Thumbs.db
+.DS_Store
