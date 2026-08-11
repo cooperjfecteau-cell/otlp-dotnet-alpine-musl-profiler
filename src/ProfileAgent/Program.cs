@@ -33,14 +33,23 @@ var resource = ResourceBuilder.CreateDefault()
 
 // Surface exporter failures. Without this the SDK swallows them into its own
 // diagnostic channel, so the agent happily reports "published N records" for
-// records that never left the process -- which is exactly what happened when the
-// collector had no logs pipeline to receive them.
-using var selfDiag = new OtelSelfDiagnostics(log);
+// records that never left the process.
+using var selfDiag = new OtelSelfDiagnostics();
+selfDiag.Attach(log);
 
 using var otelFactory = LoggerFactory.Create(b => b.AddOpenTelemetry(o =>
 {
     o.SetResourceBuilder(resource);
-    o.AddOtlpExporter();
+    o.AddOtlpExporter((_, processor) =>
+    {
+        // The default queue is 2048 records. A session publishes its entire result
+        // in one burst — thousands of records in a tight loop — so the default
+        // silently drops most of them: 7,266 contention records were emitted and
+        // 733 arrived. Sized for a large session with headroom.
+        processor.BatchExportProcessorOptions.MaxQueueSize = 32768;
+        processor.BatchExportProcessorOptions.MaxExportBatchSize = 1024;
+        processor.BatchExportProcessorOptions.ScheduledDelayMilliseconds = 1000;
+    });
 }));
 var records = otelFactory.CreateLogger("profile");
 
@@ -186,13 +195,15 @@ int Publish(ParsedTrace parsed, Session session, int durationSeconds)
     foreach (var c in parsed.Contentions)
     {
         var attrs = Common("contention");
-        attrs.Add(new("contention.duration_ns", c.DurationNs));
+        attrs.Add(new("contention.count", c.Count));
+        attrs.Add(new("contention.total_duration_ns", c.TotalDurationNs));
+        attrs.Add(new("contention.max_duration_ns", c.MaxDurationNs));
         // The waiting stack, folded the same way CPU samples are, so contention
-        // can be rendered as a flame graph on the same machinery.
+        // renders as a flame graph on the same machinery — weighted by wait time
+        // rather than sample count.
         attrs.Add(new("profile.stack.folded", c.Folded));
         attrs.Add(new("profile.stack.hash", c.Hash));
         attrs.Add(new("thread.id", c.ThreadId));
-        attrs.Add(new("profile.event_offset_ms", c.TimestampMs));
         Emit(attrs, "lock contention");
     }
 

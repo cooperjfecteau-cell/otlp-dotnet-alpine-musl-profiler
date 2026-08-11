@@ -12,8 +12,21 @@ internal sealed record FoldedSample(string Folded, string Hash, int Depth, bool 
 /// <summary>A completed garbage collection.</summary>
 internal sealed record GcEvent(int Generation, string Reason, string Kind, long DurationNs, double TimestampMs);
 
-/// <summary>A lock contention that actually blocked, with the stack that was waiting.</summary>
-internal sealed record ContentionEvent(int ThreadId, long DurationNs, string Folded, string Hash, double TimestampMs);
+/// <summary>
+/// Blocking lock contention, aggregated by (stack, thread) — the same grain as CPU
+/// samples, so contention renders on the same flame-graph machinery.
+///
+/// Aggregated rather than emitted per event on purpose. One session produced 7,266
+/// individual contentions; as records that is mostly noise, and it overflowed the
+/// exporter queue. What an investigator wants is "which call path waited, and for
+/// how long in total", which is this.
+/// </summary>
+internal sealed record ContentionGroup(int ThreadId, string Folded, string Hash)
+{
+    public long Count { get; set; }
+    public long TotalDurationNs { get; set; }
+    public long MaxDurationNs { get; set; }
+}
 
 /// <summary>Allocation attributed to a type, aggregated over the window.</summary>
 internal sealed record AllocationSummary(string TypeName, long Bytes, long Ticks);
@@ -21,7 +34,7 @@ internal sealed record AllocationSummary(string TypeName, long Bytes, long Ticks
 internal sealed record ParsedTrace(
     IReadOnlyCollection<FoldedSample> CpuSamples,
     IReadOnlyCollection<GcEvent> GarbageCollections,
-    IReadOnlyCollection<ContentionEvent> Contentions,
+    IReadOnlyCollection<ContentionGroup> Contentions,
     IReadOnlyCollection<AllocationSummary> Allocations);
 
 /// <summary>
@@ -47,7 +60,8 @@ internal static class NettraceReader
 
             var cpu = new Dictionary<(string Hash, int Tid), FoldedSample>();
             var gcs = new List<GcEvent>();
-            var contentions = new List<ContentionEvent>();
+            var contentions = new Dictionary<(string Hash, int Tid), ContentionGroup>();
+            var contentionEvents = 0;
             var allocations = new Dictionary<string, (long Bytes, long Ticks)>();
 
             var cpuTotal = 0;
@@ -81,14 +95,23 @@ internal static class NettraceReader
                 // drown the signal we are after.
                 if (data.ContentionFlags != ContentionFlags.Managed) return;
 
+                contentionEvents++;
+
                 var (folded, _) = Folding.Fold(data.CallStack());
                 var (cut, _) = Folding.Truncate(folded);
-                contentions.Add(new ContentionEvent(
-                    ThreadId: data.ThreadID,
-                    DurationNs: (long)data.DurationNs,
-                    Folded: cut,
-                    Hash: Folding.Hash(folded),
-                    TimestampMs: data.TimeStampRelativeMSec));
+                var hash = Folding.Hash(folded);
+                var key = (hash, data.ThreadID);
+
+                if (!contentions.TryGetValue(key, out var group))
+                {
+                    group = new ContentionGroup(data.ThreadID, cut, hash);
+                    contentions[key] = group;
+                }
+
+                var durationNs = (long)data.DurationNs;
+                group.Count++;
+                group.TotalDurationNs += durationNs;
+                if (durationNs > group.MaxDurationNs) group.MaxDurationNs = durationNs;
             };
 
             source.Clr.GCAllocationTick += data =>
@@ -132,7 +155,8 @@ internal static class NettraceReader
             log.Info(
                 $"parsed {cpuTotal} CPU samples into {cpu.Count} (stack,thread) groups " +
                 $"({withoutStack} without a usable stack); " +
-                $"{gcs.Count} GCs, {contentions.Count} blocking contentions, " +
+                $"{gcs.Count} GCs, {contentionEvents} blocking contentions in " +
+                $"{contentions.Count} (stack,thread) groups, " +
                 $"{allocations.Count} allocation types");
 
             var allocSummaries = allocations
@@ -142,7 +166,7 @@ internal static class NettraceReader
                 .Take(50)
                 .ToList();
 
-            return new ParsedTrace(cpu.Values, gcs, contentions, allocSummaries);
+            return new ParsedTrace(cpu.Values, gcs, contentions.Values, allocSummaries);
         }
         finally
         {
