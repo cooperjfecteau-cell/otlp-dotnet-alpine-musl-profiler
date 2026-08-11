@@ -75,6 +75,14 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
 
 ## Not yet specified
 
+- **An always-on metrics layer as the real cost control** — Elastic's
+  `profilingmetricsconnector` turns stacktraces into classified counters
+  (`samples.kernel.count`, `samples.native.count`, `samples.go.count`, attributes for
+  syscall, shared library, kernel area) at a tiny fraction of per-stack log volume. A hybrid —
+  continuous cheap metrics for *where* to look, on-demand expensive logs for *what the call
+  path was* — would deliver the cost control session gating was meant to provide, without
+  sacrificing the pre-problem window, and it exists upstream rather than needing to be built.
+  Needs a decision.
 - **Broker authentication** — how a Dynatrace workflow proves it may start a profile.
   Shared secret, OAuth client, or mTLS. Sharp enough to ticket once the broker API shape
   is prototyped.
