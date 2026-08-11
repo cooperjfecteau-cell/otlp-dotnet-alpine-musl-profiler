@@ -139,6 +139,29 @@ jobs:
             ghcr.io/${{ github.repository }}/demo-app:latest
             ghcr.io/${{ github.repository }}/demo-app:${{ github.sha }}
 
+  # EventPipe half: drives dotnet-monitor, parses nettrace, exports OTLP logs.
+  profile-agent:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: src/ProfileAgent
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/profile-agent:latest
+            ghcr.io/${{ github.repository }}/profile-agent:${{ github.sha }}
+
   # Publishes the image the DaemonSet actually runs. This is the step that makes
   # the project adoptable at all: the pipeline currently on the cluster depends on
   # a bespoke image in a private ECR that nobody else can pull.
