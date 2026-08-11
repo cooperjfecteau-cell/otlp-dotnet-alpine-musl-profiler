@@ -115,7 +115,20 @@ internal sealed class SessionRegistry(
             };
 
             _sessions[id] = state;
-            await WriteGateAsync(ct);
+            try
+            {
+                await WriteGateAsync(ct);
+            }
+            catch
+            {
+                // Roll back. Leaving the session in memory after a failed gate write
+                // is worse than failing outright: it would block every subsequent
+                // request for this service with a 409 that points at a session which
+                // is not collecting anything, and nothing would recover it until the
+                // hour-long expiry elapsed.
+                _sessions.Remove(id);
+                throw;
+            }
             return (state, true, null);
         }
         finally
@@ -183,15 +196,20 @@ internal sealed class SessionRegistry(
 
         var json = JsonSerializer.Serialize(open);
 
-        var patch = new V1ConfigMap
-        {
-            Data = new Dictionary<string, string> { ["sessions.json"] = json },
-        };
-
         try
         {
+            // Read-modify-write rather than constructing a bare object. Replace
+            // needs the complete resource -- metadata.name included -- and passing
+            // only Data fails. It also preserves any other keys in the ConfigMap
+            // instead of silently deleting them.
+            var current = await kube.CoreV1.ReadNamespacedConfigMapAsync(
+                configMapName, configMapNamespace, cancellationToken: ct);
+
+            current.Data ??= new Dictionary<string, string>();
+            current.Data["sessions.json"] = json;
+
             await kube.CoreV1.ReplaceNamespacedConfigMapAsync(
-                patch, configMapName, configMapNamespace, cancellationToken: ct);
+                current, configMapName, configMapNamespace, cancellationToken: ct);
             log.LogInformation("gate updated: {Count} open session(s)", open.Count);
         }
         catch (Exception ex)
