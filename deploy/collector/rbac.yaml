@@ -1,0 +1,39 @@
+# RBAC for the profiling collector DaemonSet.
+#
+# The k8sattributes processor needs to read pods and namespaces to map a profiled
+# process back to the workload that owns it. Without this the records carry a node
+# name and nothing else, which is most of why the existing pipeline cannot attribute
+# profiles to a service.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dotnet-profiler-collector
+  namespace: dotnet-profiler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dotnet-profiler-collector
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["extensions"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dotnet-profiler-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dotnet-profiler-collector
+subjects:
+  - kind: ServiceAccount
+    name: dotnet-profiler-collector
+    namespace: dotnet-profiler

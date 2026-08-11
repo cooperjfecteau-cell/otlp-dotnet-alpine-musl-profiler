@@ -1,0 +1,213 @@
+# Profiling collector: eBPF receiver, two-tier export.
+#
+#   profiling ──┬─► profilingmetrics ─► metrics ─► Dynatrace   (always on, cheap)
+#               └─► profilestologs   ─► logs    ─► Dynatrace   (gated to sessions)
+#
+# Metrics tell you WHERE to look. Logs tell you WHAT the call path was.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: collector-config
+  namespace: dotnet-profiler
+data:
+  config.yaml: |
+    receivers:
+      profiling:
+        # The existing DaemonSet runs at 19. Kept identical so a side-by-side
+        # comparison against it is measuring the connector, not the sample rate.
+        samples_per_second: 19
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.namespace.name
+            - k8s.node.name
+            - k8s.deployment.name
+            - k8s.container.name
+            - container.id
+            - container.image.name
+            - container.image.tag
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: resource_attribute
+                name: container.id
+
+      # Derive service.name from the profiled process, NEVER upsert a constant.
+      #
+      # The pipeline running today does `upsert service.name = "node-profiler"` at
+      # resource level, which collapsed 112 distinct profiled processes into a
+      # single identity. That destroys attribution and makes scoping-by-service
+      # impossible, which is the main cost lever.
+      transform/service_name:
+        error_mode: ignore
+        profile_statements:
+          - context: resource
+            statements:
+              - set(attributes["service.name"], attributes["process.environment_variable.OTEL_SERVICE_NAME"])
+                where attributes["process.environment_variable.OTEL_SERVICE_NAME"] != nil
+              - set(attributes["service.name"], attributes["k8s.deployment.name"])
+                where attributes["service.name"] == nil and attributes["k8s.deployment.name"] != nil
+              - set(attributes["service.name"], attributes["process.executable.name"])
+                where attributes["service.name"] == nil
+              - delete_key(attributes, "process.environment_variable.OTEL_SERVICE_NAME")
+
+      resource/cluster:
+        attributes:
+          - key: k8s.cluster.name
+            value: "eks-arm-new"
+            action: upsert
+          - key: k8s.node.name
+            value: "${env:NODE_NAME}"
+            action: upsert
+
+      batch:
+        timeout: 10s
+        send_batch_size: 512
+
+    connectors:
+      profilingmetrics:
+        flush_interval: 30s
+
+      profilestologs:
+        max_folded_chars: 30000
+        resource_marker:
+          dt.openpipeline.source: dotnet-profiler
+        gating:
+          # DISABLED for the initial validation run only, so output can be compared
+          # against the existing pipeline without waiting for a broker that does not
+          # exist yet. Must be flipped back to true before this is left running --
+          # ungated per-stack export is the expensive tier.
+          enabled: false
+          session_file: /etc/profiler-sessions/sessions.json
+          reload_interval: 5s
+
+    exporters:
+      otlphttp/dynatrace:
+        # PROTOBUF-ONLY endpoint. application/json returns 415 even with a valid
+        # OTLP payload -- measured. This exporter emits protobuf natively, which is
+        # why export goes through the collector rather than hand-rolled HTTP.
+        endpoint: "https://YOUR-TENANT.live.dynatrace.com/api/v2/otlp"
+        headers:
+          Authorization: "Api-Token ${env:DT_API_TOKEN}"
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 100
+
+      debug:
+        verbosity: basic
+
+    service:
+      telemetry:
+        logs:
+          level: info
+      pipelines:
+        profiles:
+          receivers: [profiling]
+          exporters: [profilingmetrics, profilestologs]
+
+        metrics/from-profiles:
+          receivers: [profilingmetrics]
+          processors: [memory_limiter, k8sattributes, transform/service_name, resource/cluster, batch]
+          exporters: [otlphttp/dynatrace, debug]
+
+        logs/from-profiles:
+          receivers: [profilestologs]
+          processors: [memory_limiter, k8sattributes, transform/service_name, resource/cluster, batch]
+          exporters: [otlphttp/dynatrace, debug]
+---
+# Active profiling sessions, written by the broker. Empty until one exists.
+#
+# A ConfigMap rather than an HTTP endpoint because this is a DaemonSet: the broker
+# writes once and every node observes it, instead of enumerating pods and fanning
+# out N calls it must then retry individually.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: profiler-sessions
+  namespace: dotnet-profiler
+data:
+  sessions.json: "[]"
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dotnet-profiler-collector
+  namespace: dotnet-profiler
+spec:
+  selector:
+    matchLabels:
+      app: dotnet-profiler-collector
+  template:
+    metadata:
+      labels:
+        app: dotnet-profiler-collector
+    spec:
+      serviceAccountName: dotnet-profiler-collector
+      # The profiler resolves processes by PID across the whole node, so it needs
+      # the host PID namespace to see anything but itself.
+      hostPID: true
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: collector
+          image: ghcr.io/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/otelcol-dotnet-profiler:latest
+          args:
+            - --config=/etc/collector/config.yaml
+            # Mandatory: without it the profiles pipeline does not start at all.
+            - --feature-gates=service.profilesSupport
+          securityContext:
+            # Verified on-node: unprivileged_bpf_disabled=1 and
+            # perf_event_paranoid=2, so CAP_BPF/CAP_PERFMON alone are not enough
+            # here. Reducing this is tracked as its own question on the map.
+            privileged: true
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: DT_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: dynatrace
+                  key: DT_API_TOKEN
+            - name: GOMEMLIMIT
+              value: "400MiB"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/collector
+            - name: sessions
+              mountPath: /etc/profiler-sessions
+      volumes:
+        - name: config
+          configMap:
+            name: collector-config
+        - name: sessions
+          configMap:
+            name: profiler-sessions
