@@ -43,6 +43,15 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
 - [Research — Dynatrace event APIs](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/5) — one endpoint for both (`POST /api/v2/events/ingest`, scope `events.ingest`); **attaching a Davis event to a problem does not exist** — the real mechanism is `CUSTOM_ANNOTATION` carrying `annotation.problem_ids`, idempotent on `annotation.id`
 - [Research — Grail bucket, retention, and cost](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/6) — **a record cannot select its own bucket**; routing is an OpenPipeline Storage-stage `bucketAssignment` with two independent match points. ~$0.0006 per 90s single-pod profile; ingest is 94% of the bill and unbounded queries are the tail risk
 - [Research — dotnet-monitor on Alpine](https://github.com/cooperjfecteau-cell/otlp-dotnet-alpine-musl-profiler/issues/4) — **no musl image exists past 7.3.4**; the sidecar runs glibc deliberately, which is sound because the app boundary is a Unix socket carrying diagnostic IPC, not an ABI. Sidecar must be the listener (CoreCLR can only dial out); `nosuspend` is load-bearing; `durationSeconds` must be set up front
+- **Retention: 7 days, pay-per-query** — settled directly by the owner after #6 showed
+  *Retain with Included Queries* has a 10-day minimum and costs 28.6x on storage. Profiling is
+  write-heavy and read-light, so paying 28.6x to make the cheap half free is the wrong trade.
+  Query cost is instead controlled by bucket filters and session-bounded queries.
+- **Two token types, one stored secret** — ingest (`logs.ingest`, `events.ingest`,
+  `openTelemetryTrace.ingest`) uses a classic API token; bucket management
+  (`storage:bucket-definitions:*`) uses a platform token. Only the API token is stored in
+  `.env`; bucket creation is a one-time interactive `dtctl` step, so the long-lived runtime
+  secret cannot create or delete storage.
 
 ## Not yet specified
 
@@ -55,9 +64,6 @@ service-user UUIDs. Every documented DQL query carries an explicit bucket filter
   needs measuring before anyone can be told it's safe for production. Sharpened by #4:
   `BufferSizeInMB` is charged to the *application's* memory limit, not the sidecar's, so
   profiling can OOMKill the workload it is observing. 128 MB is a guess pending measurement.
-- **Retention vs. included queries** — the owner asked for an "included query bucket", but
-  *Retain with Included Queries* carries a 10-day minimum, so it is mutually exclusive with
-  the chosen 7-day retention, and costs 28.6x on storage. Needs an explicit call.
 - **CI/CD for Alpine image builds** — GitHub Actions is the assumed path (no local Docker
   by choice), but the workflow shape isn't pinned.
 - **DaemonSet RBAC and privilege scope** — the least privilege the eBPF profiler can run
