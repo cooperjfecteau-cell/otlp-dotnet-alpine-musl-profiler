@@ -79,13 +79,28 @@ jobs:
         # `components` lists everything registered. If our connector is missing from
         # the output the build silently produced a useless collector, which a plain
         # exit-zero build would not catch.
+        #
+        # The binary is located rather than assumed: ocb resolves output_path
+        # relative to the working directory, not the manifest, so it does not land
+        # under distribution/.
         run: |
-          ./distribution/_build/otelcol-dotnet-profiler components > components.yaml
-          cat components.yaml
-          grep -q 'profilestologs' components.yaml || {
-            echo "::error::profilestologs connector is not registered in the built binary"
+          set -euo pipefail
+          BIN="$(find . -type f -name 'otelcol-dotnet-profiler' | head -1)"
+          if [ -z "$BIN" ]; then
+            echo "::error::built binary not found"
+            find . -maxdepth 3 -type d -name '_build'
             exit 1
-          }
+          fi
+          echo "binary: $BIN"
+          "$BIN" components > components.yaml
+          cat components.yaml
+          for want in profilestologs profilingmetrics profiling; do
+            grep -q "$want" components.yaml || {
+              echo "::error::component '$want' is not registered in the built binary"
+              exit 1
+            }
+          done
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
 
       - name: Upload binary
         # Non-fatal: artifact storage quota on this account is exhausted, and a
@@ -95,4 +110,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: otelcol-dotnet-profiler
-          path: distribution/_build/
+          path: _build/
