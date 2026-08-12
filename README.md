@@ -12,7 +12,7 @@ not a demo: every claim below was measured on a live cluster.
 |---|---|
 | **[Getting started](docs/GETTING_STARTED.md)** | The happy path. Follow it top to bottom. |
 | **[Lessons learned](docs/LESSONS_LEARNED.md)** | Everything that surprised us. Read it when something behaves oddly — most failures here are silent, and several error messages point away from the cause. |
-| **[Cost model](docs/COST_MODEL.md)** | What it costs, as a formula you can point at your own fleet. Measured, not estimated. |
+| **[Cost model](docs/COST_MODEL.md)** | What it costs, as a formula you can point at your own fleet. Measured, not estimated. There is an [interactive calculator](https://cooperjfecteau-cell.github.io/otlp-dotnet-alpine-musl-profiler/cost-model.html). |
 | **[Discovery](docs/DISCOVERY.md)** | How to fill that model in for a real environment. Most inputs are countable facts, and it says which ones are worth measuring. |
 
 ## What it does

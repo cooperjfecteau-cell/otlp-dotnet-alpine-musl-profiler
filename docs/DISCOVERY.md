@@ -204,7 +204,8 @@ fetch logs, from:-15m
 | `V` views/day | **Don't discover this.** Bounded, 100 views/day is +0.1%. Bound your queries and the input stops mattering | — |
 | `P_i`, `P_r`, `P_q` | Your DPS rate card | — |
 
-Feed the results into the [interactive calculator](COST_MODEL.md#interactive-calculator).
+Feed the results into the [interactive
+calculator](https://cooperjfecteau-cell.github.io/otlp-dotnet-alpine-musl-profiler/cost-model.html).
 
 ---
 

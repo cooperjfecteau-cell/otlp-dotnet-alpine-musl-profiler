@@ -3,6 +3,9 @@
 A parameterized model for what this pipeline costs to run, so you can scope it against your own
 fleet before deploying anything.
 
+There is an [interactive version of this
+model](https://cooperjfecteau-cell.github.io/otlp-dotnet-alpine-musl-profiler/cost-model.html) if
+you would rather change inputs than do arithmetic.
 
 **To fill in the inputs for a real environment, see [DISCOVERY.md](DISCOVERY.md)** — most of them
 are countable facts rather than estimates, and it says which ones are worth the effort.
@@ -246,6 +249,20 @@ Read these before quoting a number to anyone.
   contention will produce more per session. Re-measure with the DQL above once you have real
   traffic — it takes one session to replace every number here with your own.
 
-> The page is **private by default** — if you are handing this repo to someone else, either share
-> it from the page's share menu or ignore the link, since every formula it uses is written out
-> above.
+---
+
+## Interactive calculator
+
+An interactive version of this model, with these defaults pre-loaded:
+
+**https://cooperjfecteau-cell.github.io/otlp-dotnet-alpine-musl-profiler/cost-model.html**
+
+Same formula, same measured baselines, with the query and scope warnings wired to fire on the
+conditions that actually cost money.
+
+It ships in this repo as [`docs/cost-model.html`](cost-model.html) — a single self-contained file
+with no external assets, so you can also open it straight from disk, or hand it to someone who has
+neither the repo nor a Dynatrace login.
+
+**This document is the source of truth.** The page carries its own copy of the constants; if you
+re-measure your baseline, change both.

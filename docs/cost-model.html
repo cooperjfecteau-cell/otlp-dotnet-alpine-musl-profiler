@@ -1,0 +1,632 @@
+<!doctype html>
+<!--
+  Interactive version of docs/COST_MODEL.md.
+
+  COST_MODEL.md is the source of truth. The constants below (measured session
+  volume, DPS rates, sidecar requests) are a second copy of the ones written out
+  there — if you change one, change both, or the page will quietly disagree with
+  the document it claims to implement.
+
+  Self-contained on purpose: no external CSS, JS, fonts or images, so it can be
+  opened from disk, served by GitHub Pages, or emailed as a single file.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profiling cost model</title>
+<style>
+  /* Reset. Standalone this page has no host stylesheet, so the few resets the
+     layout assumes are stated here rather than inherited. */
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; }
+  img, svg { max-width: 100%; height: auto; }
+</style>
+<style>
+  /* ── tokens ───────────────────────────────────────────────────────────────
+     Light is the base. Dark redefines only tokens, twice: once behind
+     prefers-color-scheme (guarded so an explicit light choice wins), once behind
+     the explicit dark stamp. No component style lives inside a theme block. */
+  :root {
+    --ground:        #F6F7F9;
+    --surface:       #FFFFFF;
+    --surface-sunk:  #EDEFF3;
+    --line:          #D8DDE5;
+    --line-soft:     #E7EAF0;
+
+    --ink:           #171C24;
+    --ink-muted:     #5B6472;
+    --ink-faint:     #8891A0;
+
+    /* Ember: the one warm note, borrowed from flame graphs. Spent only on
+       totals, focus rings and the expensive tier. */
+    --ember:         #C25E22;
+    --ember-soft:    #F0D9C8;
+    /* The cheap always-on tier reads cool against it. */
+    --teal:          #24706C;
+    --teal-soft:     #CFE3E1;
+    --alarm:         #A8331F;
+
+    --radius: 3px;
+    --gap: 20px;
+
+    --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-num: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:       #10141A;
+      --surface:      #171C24;
+      --surface-sunk: #0B0E13;
+      --line:         #2A3240;
+      --line-soft:    #212934;
+
+      --ink:          #E6EAF1;
+      --ink-muted:    #9AA4B4;
+      --ink-faint:    #6C7787;
+
+      --ember:        #E08A4C;
+      --ember-soft:   #3B2617;
+      --teal:         #5FB5AF;
+      --teal-soft:    #16302E;
+      --alarm:        #E0705A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:       #10141A;
+    --surface:      #171C24;
+    --surface-sunk: #0B0E13;
+    --line:         #2A3240;
+    --line-soft:    #212934;
+
+    --ink:          #E6EAF1;
+    --ink-muted:    #9AA4B4;
+    --ink-faint:    #6C7787;
+
+    --ember:        #E08A4C;
+    --ember-soft:   #3B2617;
+    --teal:         #5FB5AF;
+    --teal-soft:    #16302E;
+    --alarm:        #E0705A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 24px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  /* ── masthead ─────────────────────────────────────────────────────────── */
+  header { display: flex; flex-direction: column; gap: 8px; }
+
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    font-weight: 680;
+    text-wrap: balance;
+  }
+
+  .lede {
+    margin: 0;
+    max-width: 68ch;
+    color: var(--ink-muted);
+  }
+
+  /* ── two-column shell ─────────────────────────────────────────────────── */
+  .shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
+    gap: 28px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    .results { position: static !important; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+
+  .panel > h2 {
+    margin: 0;
+    padding: 14px 18px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    font-weight: 650;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+
+  /* ── controls ─────────────────────────────────────────────────────────── */
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
+
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+  .field label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .field .unit { color: var(--ink-faint); font-weight: 500; font-size: 11.5px; }
+  .field .hint { font-size: 11.5px; color: var(--ink-faint); line-height: 1.4; }
+
+  input[type="number"] {
+    width: 100%;
+    padding: 7px 9px;
+    font-family: var(--font-num);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    background: var(--surface-sunk);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  input[type="number"]:focus-visible {
+    outline: 2px solid var(--ember);
+    outline-offset: 1px;
+    border-color: var(--ember);
+  }
+
+  .toggle { display: flex; align-items: flex-start; gap: 9px; }
+  .toggle input { margin-top: 3px; accent-color: var(--ember); width: 15px; height: 15px; }
+  .toggle label { font-size: 12.5px; font-weight: 600; }
+  .toggle .hint { font-size: 11.5px; color: var(--ink-faint); }
+
+  /* ── results ──────────────────────────────────────────────────────────── */
+  .results { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 16px; }
+
+  .total {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 18px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .total .amount {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+    font-size: 38px;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    color: var(--ember);
+    font-weight: 600;
+  }
+  .total .caption { font-size: 12px; color: var(--ink-muted); }
+
+  /* proportion bar: which part of the bill dominates, at a glance */
+  .bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--surface-sunk); }
+  .bar > span { display: block; height: 100%; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+  th { font-weight: 600; color: var(--ink-muted); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+  td.num { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  tr.sum td { border-bottom: none; border-top: 2px solid var(--line); font-weight: 700; padding-top: 9px; }
+
+  .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 7px; vertical-align: baseline; }
+
+  /* The crossover is the one number that answers "which line item wins as I grow",
+     so it gets its own block rather than a fourth cell in the derived grid. */
+  .crossover {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 12px 13px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--ember);
+    border-radius: var(--radius);
+    background: var(--surface-sunk);
+  }
+  .crossover .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-faint); font-weight: 600; }
+  .crossover .v { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 650; color: var(--ember); }
+  .crossover .hint { font-size: 11.5px; color: var(--ink-muted); line-height: 1.45; margin-top: 3px; }
+
+  .note {
+    display: flex; gap: 9px;
+    padding: 11px 13px;
+    border-radius: var(--radius);
+    font-size: 12.5px;
+    line-height: 1.45;
+    border: 1px solid var(--line);
+    background: var(--surface-sunk);
+    color: var(--ink-muted);
+  }
+  .note.warn { border-color: var(--alarm); color: var(--ink); }
+  .note strong { color: var(--ink); }
+
+  .derived {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px;
+  }
+  .derived div { display: flex; flex-direction: column; gap: 1px; }
+  .derived .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-faint); font-weight: 600; }
+  .derived .v { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 17px; font-weight: 600; }
+
+  /* ── formula ──────────────────────────────────────────────────────────── */
+  .formula {
+    overflow-x: auto;
+    background: var(--surface-sunk);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    font-family: var(--font-num);
+    font-size: 12.5px;
+    line-height: 1.75;
+    white-space: pre;
+    color: var(--ink-muted);
+  }
+  .formula b { color: var(--ink); font-weight: 600; }
+
+  footer { color: var(--ink-faint); font-size: 12.5px; max-width: 72ch; }
+  footer a { color: var(--ember); }
+  code { font-family: var(--font-num); font-size: 0.92em; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">otlp-dotnet-alpine-musl-profiler</div>
+    <h1>What this pipeline costs to run</h1>
+    <p class="lede">
+      Defaults are measured, not estimated — <strong>12.3&nbsp;MiB per 90-second session per pod</strong>
+      (8.0&nbsp;MiB eBPF + 4.3&nbsp;MiB EventPipe), averaged over four real captures on
+      2026-08-11/12. Change the inputs to scope your own environment.
+    </p>
+  </header>
+
+  <div class="shell">
+    <!-- ── inputs ── -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+
+      <section class="panel">
+        <h2>Profiling scope</h2>
+        <div class="panel-body">
+          <div class="grid2">
+            <div class="field">
+              <label for="pods">Pods profiled <span class="unit">count</span></label>
+              <input type="number" id="pods" value="10" min="0" step="1">
+              <span class="hint">Only pods with the sidecar, not every pod on the node.</span>
+            </div>
+            <div class="field">
+              <label for="sessions">Sessions per pod <span class="unit">per day</span></label>
+              <input type="number" id="sessions" value="4" min="0" step="0.5">
+              <span class="hint">How often a workflow triggers a capture.</span>
+            </div>
+            <div class="field">
+              <label for="duration">Session length <span class="unit">seconds</span></label>
+              <input type="number" id="duration" value="90" min="10" step="10">
+            </div>
+            <div class="field">
+              <label for="hz">eBPF sample rate <span class="unit">Hz</span></label>
+              <input type="number" id="hz" value="19" min="1" step="1">
+              <span class="hint">Node-wide. 99&nbsp;Hz is ~5× the data of 19.</span>
+            </div>
+          </div>
+          <div class="toggle">
+            <input type="checkbox" id="scoped" checked>
+            <div>
+              <label for="scoped">Collector filtered to target services</label>
+              <div class="hint">Unfiltered, the DaemonSet profiles every process on the node — typically 10× the records.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Storage &amp; queries</h2>
+        <div class="panel-body">
+          <div class="grid2">
+            <div class="field">
+              <label for="retention">Bucket retention <span class="unit">days</span></label>
+              <input type="number" id="retention" value="7" min="1" step="1">
+            </div>
+            <div class="field">
+              <label for="queries">Flame graph views <span class="unit">per day</span></label>
+              <input type="number" id="queries" value="20" min="0" step="1">
+            </div>
+          </div>
+          <div class="toggle">
+            <input type="checkbox" id="bounded" checked>
+            <div>
+              <label for="bounded">Queries bounded by session id</label>
+              <div class="hint">Unbounded scans of the whole bucket are the single largest cost risk here.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Compute</h2>
+        <div class="panel-body">
+          <div class="grid2">
+            <div class="field">
+              <label for="nodes">Cluster nodes <span class="unit">count</span></label>
+              <input type="number" id="nodes" value="3" min="1" step="1">
+              <span class="hint">The DaemonSet runs on every one.</span>
+            </div>
+            <div class="field">
+              <label for="nodecost">Node cost <span class="unit">$ / month</span></label>
+              <input type="number" id="nodecost" value="49" min="0" step="1">
+            </div>
+            <div class="field">
+              <label for="nodecpu">Node vCPU <span class="unit">cores</span></label>
+              <input type="number" id="nodecpu" value="2" min="0.5" step="0.5">
+            </div>
+            <div class="field">
+              <label for="nodemem">Node memory <span class="unit">GiB</span></label>
+              <input type="number" id="nodemem" value="8" min="1" step="1">
+            </div>
+          </div>
+          <div class="toggle">
+            <input type="checkbox" id="edge" checked>
+            <div>
+              <label for="edge">Dedicated x86 node for EdgeConnect</label>
+              <div class="hint">Required on an arm64 cluster — no arm64 EdgeConnect image exists. Priced at one extra node.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Rate card</h2>
+        <div class="panel-body">
+          <div class="grid2">
+            <div class="field">
+              <label for="pIngest">Log ingest <span class="unit">$ / GiB</span></label>
+              <input type="number" id="pIngest" value="0.20" min="0" step="0.01">
+            </div>
+            <div class="field">
+              <label for="pRetain">Retention <span class="unit">$ / GiB-day</span></label>
+              <input type="number" id="pRetain" value="0.0007" min="0" step="0.0001">
+            </div>
+            <div class="field">
+              <label for="pQuery">Query <span class="unit">$ / GiB scanned</span></label>
+              <input type="number" id="pQuery" value="0.0035" min="0" step="0.0001">
+            </div>
+          </div>
+          <div class="note">Defaults are Dynatrace DPS list rates. Substitute your own contract.</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ── results ── -->
+    <div class="results">
+      <section class="panel">
+        <div class="total">
+          <div class="amount" id="totalMonth">—</div>
+          <div class="caption">per month, all in</div>
+        </div>
+        <div style="padding: 14px 18px 18px; display:flex; flex-direction:column; gap:14px;">
+          <div class="bar" id="bar" aria-hidden="true"></div>
+
+          <table>
+            <thead>
+              <tr><th>Component</th><th style="text-align:right">$ / month</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="swatch" style="background:var(--ember)"></span>Log ingest</td><td class="num" id="cIngest">—</td></tr>
+              <tr><td><span class="swatch" style="background:var(--ember-soft)"></span>Retention</td><td class="num" id="cRetain">—</td></tr>
+              <tr><td><span class="swatch" style="background:var(--alarm)"></span>Queries</td><td class="num" id="cQuery">—</td></tr>
+              <tr><td><span class="swatch" style="background:var(--teal)"></span>Compute</td><td class="num" id="cCompute">—</td></tr>
+              <tr><td><span class="swatch" style="background:var(--teal-soft)"></span>EdgeConnect node</td><td class="num" id="cEdge">—</td></tr>
+              <tr class="sum"><td>Total</td><td class="num" id="cTotal">—</td></tr>
+            </tbody>
+          </table>
+
+          <div class="derived">
+            <div><span class="k">Per session</span><span class="v" id="perSession">—</span></div>
+            <div><span class="k">Ingest / day</span><span class="v" id="gibDay">—</span></div>
+            <div><span class="k">Dynatrace share</span><span class="v" id="dtShare">—</span></div>
+          </div>
+
+          <div class="crossover">
+            <div class="k">Ingest overtakes compute at</div>
+            <div><span class="v" id="crossover">—</span> <span class="k" style="text-transform:none; letter-spacing:0">sessions / pod / day</span></div>
+            <div class="hint" id="crossoverWhere"></div>
+          </div>
+
+          <div id="notes" style="display:flex; flex-direction:column; gap:9px;"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel">
+    <h2>The formula</h2>
+    <div class="panel-body">
+      <div class="formula"><b>session_MiB</b>  = 8.04 × (D/90) × (H/19) × F     <span style="opacity:.7">← eBPF half</span>
+              + 4.23 × (D/90)                 <span style="opacity:.7">← EventPipe half, fixed 1 kHz</span>
+
+<b>ingest_GiB_day</b> = pods × sessions × session_MiB / 1024
+
+<b>ingest_$</b>   = ingest_GiB_day × 30.4 × P_ingest
+<b>retain_$</b>   = ingest_GiB_day × 1.5 × R × P_retain × 30.4   <span style="opacity:.7">← 1.5 = index expansion</span>
+<b>query_$</b>    = views × scan_GiB × P_query × 30.4
+<b>compute_$</b>  = (nodes × collector_frac + pods × sidecar_frac) × node_$
+
+where  D = seconds, H = eBPF Hz, R = retention days
+       F = 1 if scoped to target services, else 10
+       scan_GiB = one session (bounded) or R days of data (unbounded)
+       collector_frac = max(0.10 vCPU / node_vCPU, 0.25 GiB / node_GiB)
+       sidecar_frac   = max(0.10 vCPU / node_vCPU, 0.25 GiB / node_GiB)</div>
+
+      <div class="note">
+        <div><strong>Where this model is soft.</strong> Record counts are unique
+        <code>(stack, thread)</code> groups, and unique stacks <em>saturate</em> — a session twice as
+        long does not produce twice as many. Scaling linearly with duration therefore
+        <strong>over-estimates</strong> long sessions. Treat the number as an upper bound, and
+        re-measure with the DQL in <code>docs/queries/</code> once you have real traffic.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Excluded on purpose: your existing cluster, CI minutes, and any Dynatrace licensing beyond
+    data. Also excluded — and worth budgeting separately — the EventPipe buffer, which is charged
+    against the <em>profiled application's</em> memory limit rather than the sidecar's, so
+    profiling can OOMKill the workload it observes.
+  </footer>
+</div>
+
+<script>
+  // Measured baselines, 90 s session, 1 pod, eBPF 19 Hz, EventPipe ~1 kHz.
+  // Averaged across four real captures rather than modelled.
+  const BASE_EBPF_MIB = 8.04;
+  const BASE_EPIPE_MIB = 4.23;
+  const DAYS_PER_MONTH = 30.4;
+  const EXPANSION = 1.5;          // index/storage overhead over raw ingest
+  const UNSCOPED_MULTIPLIER = 10; // whole-node profiling vs target services
+  const COLLECTOR_CPU = 0.10, COLLECTOR_MEM = 0.25;  // per node
+  const SIDECAR_CPU  = 0.10, SIDECAR_MEM  = 0.25;    // dotnet-monitor + agent, per pod
+
+  const $ = id => document.getElementById(id);
+  const ids = ["pods","sessions","duration","hz","retention","queries","nodes",
+               "nodecost","nodecpu","nodemem","pIngest","pRetain","pQuery"];
+  const flags = ["scoped","bounded","edge"];
+
+  const money = n =>
+    n >= 1000 ? "$" + n.toLocaleString(undefined, {maximumFractionDigits: 0})
+    : n >= 1   ? "$" + n.toFixed(2)
+    : n > 0    ? "$" + n.toFixed(4)
+    : "$0";
+
+  function compute() {
+    const v = {};
+    ids.forEach(k => v[k] = parseFloat($(k).value) || 0);
+    flags.forEach(k => v[k] = $(k).checked);
+
+    const scopeFactor = v.scoped ? 1 : UNSCOPED_MULTIPLIER;
+    const sessionMiB =
+      BASE_EBPF_MIB * (v.duration / 90) * (v.hz / 19) * scopeFactor +
+      BASE_EPIPE_MIB * (v.duration / 90);
+
+    const gibDay = (v.pods * v.sessions * sessionMiB) / 1024;
+
+    const ingest = gibDay * DAYS_PER_MONTH * v.pIngest;
+    const retain = gibDay * EXPANSION * v.retention * v.pRetain * DAYS_PER_MONTH;
+
+    // Bounded: a view scans roughly one session. Unbounded: the whole retained bucket.
+    const scanGiB = v.bounded ? sessionMiB / 1024 : gibDay * EXPANSION * v.retention;
+    const query = v.queries * scanGiB * v.pQuery * DAYS_PER_MONTH;
+
+    const collectorFrac = Math.max(COLLECTOR_CPU / (v.nodecpu || 1), COLLECTOR_MEM / (v.nodemem || 1));
+    const sidecarFrac   = Math.max(SIDECAR_CPU  / (v.nodecpu || 1), SIDECAR_MEM  / (v.nodemem || 1));
+    const compute_ = (v.nodes * collectorFrac + v.pods * sidecarFrac) * v.nodecost;
+
+    const edge = v.edge ? v.nodecost : 0;
+
+    const total = ingest + retain + query + compute_ + edge;
+    const dt = ingest + retain + query;
+
+    $("cIngest").textContent  = money(ingest);
+    $("cRetain").textContent  = money(retain);
+    $("cQuery").textContent   = money(query);
+    $("cCompute").textContent = money(compute_);
+    $("cEdge").textContent    = money(edge);
+    $("cTotal").textContent   = money(total);
+    $("totalMonth").textContent = money(total);
+
+    const sessionsMonth = v.pods * v.sessions * DAYS_PER_MONTH;
+    $("perSession").textContent = sessionsMonth > 0 ? money(dt / sessionsMonth) : "—";
+    $("gibDay").textContent = gibDay.toFixed(gibDay < 1 ? 3 : 1) + " GiB";
+    $("dtShare").textContent = total > 0 ? Math.round((dt / total) * 100) + "%" : "—";
+
+    // Crossover: the sessions/pod/day at which ingest overtakes sidecar compute.
+    // Pod count cancels — both sides scale linearly in it — so this depends only on
+    // duty cycle, sample rate and scope. It is the answer to "which one wins as I grow".
+    const ingestPerPodPerSessionMonth = (sessionMiB / 1024) * DAYS_PER_MONTH * v.pIngest;
+    const sidecarPerPod = sidecarFrac * v.nodecost;
+    const crossover = ingestPerPodPerSessionMonth > 0
+      ? sidecarPerPod / ingestPerPodPerSessionMonth : Infinity;
+
+    $("crossover").textContent = !isFinite(crossover) ? "—"
+      : crossover >= 10 ? Math.round(crossover)
+      : crossover.toFixed(1);
+
+    const dutyPct = isFinite(crossover) ? (crossover * v.duration / 86400) * 100 : 0;
+    $("crossoverWhere").innerHTML = !isFinite(crossover) ? ""
+      : v.sessions > crossover
+        ? `You are <strong>above</strong> it — ingest is the larger line item. Below ${
+            crossover >= 10 ? Math.round(crossover) : crossover.toFixed(1)
+          }/day, sidecar compute is.`
+        : `You are <strong>below</strong> it, so sidecar compute is the larger line item —
+           and stays that way however many pods you add. That threshold is a
+           ${dutyPct.toFixed(1)}% profiling duty cycle.`;
+
+    // Proportion bar — which slice dominates, without reading the table.
+    const parts = [
+      [ingest, "var(--ember)"], [retain, "var(--ember-soft)"], [query, "var(--alarm)"],
+      [compute_, "var(--teal)"], [edge, "var(--teal-soft)"],
+    ];
+    $("bar").innerHTML = total > 0
+      ? parts.filter(p => p[0] > 0)
+             .map(p => `<span style="width:${(p[0] / total) * 100}%;background:${p[1]}"></span>`).join("")
+      : "";
+
+    // Notes fire on the conditions that actually bit us, not on arbitrary thresholds.
+    const notes = [];
+    if (!v.bounded && query > dt * 0.4) {
+      notes.push(["warn",
+        `<strong>Unbounded queries dominate the bill.</strong> At ${money(query)}/month they are
+         ${Math.round((query / total) * 100)}% of the total. Bounding every query by
+         <code>profile.session_id</code> is the single highest-leverage change available.`]);
+    }
+    if (!v.scoped) {
+      notes.push(["warn",
+        `<strong>Unfiltered collection.</strong> The DaemonSet is profiling every process on the
+         node, modelled here as ${UNSCOPED_MULTIPLIER}× the data. Filtering to your target
+         services is the largest single saving.`]);
+    }
+    if (compute_ + edge > dt && total > 0) {
+      notes.push(["", `<strong>Compute exceeds data cost here.</strong> At this scope the
+         Dynatrace bill is the smaller half — worth remembering when scoping against a data budget.`]);
+    }
+    if (v.hz >= 99) {
+      notes.push(["", `<strong>${v.hz} Hz is a high sample rate</strong> for whole-node collection.
+         19 Hz was sufficient to resolve 12-frame call chains in testing.`]);
+    }
+    $("notes").innerHTML = notes
+      .map(n => `<div class="note ${n[0]}"><div>${n[1]}</div></div>`).join("");
+  }
+
+  ids.concat(flags).forEach(k => $(k).addEventListener("input", compute));
+  compute();
+</script>
+
+</body>
+</html>
