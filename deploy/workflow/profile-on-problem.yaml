@@ -23,6 +23,38 @@ description: >-
 # at all. Nothing in the response or the creation output says so.
 isPrivate: false
 
+# The identity the automation engine acts as when running tasks.
+#
+# Set explicitly because it otherwise inherits whoever created the workflow — and
+# `dtctl auth login` can be a DIFFERENT Dynatrace user than your browser session.
+# Here dtctl was authenticated as a personal account while the console session was
+# a work account, so the workflow ran on behalf of an identity that had never
+# granted automation consent:
+#
+#   Could not run workflow task on behalf of '<actor>'.
+#   Please ensure Authorization Settings are configured for this user.
+#
+# That consent is per-user and one-time, at
+# /ui/apps/dynatrace.automations/settings/authorization — and it can only be granted
+# by that user, so pointing the actor at an account nobody signs in as is a dead end.
+#
+# NOTE: this field is IGNORED on create. The actor is taken from whoever
+# authenticated, and the API will not reassign it afterwards. It is kept here as
+# documentation of the requirement, not as configuration that does anything.
+#
+# The working combination, found the hard way:
+#   1. Whoever `dtctl auth login` authenticated as becomes the actor, permanently.
+#   2. That same user must be signed in to the console and must have granted
+#      Authorization Settings.
+#   3. The credential in the vault must NOT be restricted to owner-only access, or
+#      the task fails even with everything else correct. Uncheck that when creating
+#      the credential if anyone other than its creator will run the workflow.
+#
+# Re-running `dtctl auth login` does not necessarily switch accounts: an active
+# browser SSO session is reused silently, and dtctl reports the old identity. Sign
+# out of Dynatrace SSO first, or use a private window, if you need a different one.
+actor: 224f4223-ba8a-467c-92a3-96b579481158
+
 trigger:
   eventTrigger:
     triggerConfiguration:
@@ -75,13 +107,35 @@ tasks:
         type: token
         tokenPrefix: Bearer
         credentialId: CREDENTIALS_VAULT-69A2C75190942059
+      # The problem fields are emitted only when there IS a problem.
+      #
+      # On a manual run `event()` is undefined, and referencing it fails the whole
+      # task with "undefined variables event,id" — so a workflow written only for the
+      # trigger path cannot be tested by clicking Run, which is the first thing
+      # anyone does. Guarding on `event()` makes a manual run produce a valid
+      # profiling session with no annotation, which is exactly the right behaviour:
+      # the broker treats both fields as optional and skips the annotation when
+      # there is no problem to attach it to.
       payload: |
         {
           "service": "dotnet-profiler-demo",
           "namespace": "dotnet-profiler",
-          "durationSeconds": 90,
-          "problemEventId": "{{ event()['event.id'] }}",
-          "entityId": "{{ event()['affected_entity_ids'][0] }}"
+          "durationSeconds": 90
+          {%- if event() %},
+          "problemEventId": "{{ event()['event.id'] | default('') }}",
+          "entityId": "{{ event()['affected_entity_ids'] | default([]) | first | default('') }}"
+          {%- endif %}
         }
-      # 409 means "already collecting" and is a successful outcome of this workflow.
-      isSuccess: "{{ result('start_profile')['status_code'] in [202, 409] }}"
+      # No isSuccess expression. The default treats 2xx as success, which is right
+      # for the 202 this normally returns.
+      #
+      # The nuance it would have expressed: a 409 means "this service is already
+      # being profiled", which is a correct outcome rather than a failure — the
+      # existing session's annotation already carries the link this run would have
+      # produced. With the default rule a 409 marks the task failed, which is
+      # cosmetically wrong and functionally harmless.
+      #
+      # Left out deliberately rather than guessed at: `result('start_profile')` fails
+      # with "error evaluating isSuccess", and the expression dialect for referencing
+      # a task's own response is not documented anywhere I could find. Not worth
+      # burning test cycles on to make a 409 render green.
