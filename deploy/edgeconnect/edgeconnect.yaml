@@ -15,7 +15,7 @@
 # The matching tenant-side configuration:
 #   name:         dotnet-musl-profiler
 #   hostPatterns: profiler-broker.dotnet-profiler.svc.cluster.local
-#   oauthClientId: dt0s10.GJHVMWVX
+#   oauthClientId: dt0s10.YOUR-CLIENT
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,17 +51,6 @@ spec:
       containers:
         - name: edgeconnect
           image: public.ecr.aws/dynatrace/edgeconnect:latest
-          # Configured by FILE, not environment variables.
-          #
-          # The env-var route looks like it works — the binary logs
-          # "Environment variable EDGE_CONNECT_OAUTH_CLIENT_ID will be used" for each
-          # one — and then fails with `missing field 'oauth'`. It reads the flat
-          # variables but its config struct wants `oauth` as a nested object, and
-          # there is no flat spelling that satisfies it. The startup log's first
-          # line is the actual instruction: it searches `/` for YAML.
-          #
-          # The whole config lives in a Secret rather than a ConfigMap because the
-          # client secret is in it.
           # Configured by environment, with DOUBLE underscore for nested fields.
           #
           # The file route was tried first and abandoned: a busybox pod with an

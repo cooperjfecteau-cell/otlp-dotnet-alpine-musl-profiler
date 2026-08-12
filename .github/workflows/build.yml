@@ -130,10 +130,12 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: src/DemoApp
-          # arm64 only: the target cluster is Graviton, and emulated cross-builds
-          # of a .NET SDK image are slow enough to be worth avoiding until an
-          # adopter actually needs amd64.
-          platforms: linux/arm64
+          # Both architectures. This was arm64-only while the only consumer was a
+          # Graviton cluster; an adopter on x86 nodes could not run it at all, and
+          # the failure (`exec format error`) reads like a corrupt image rather than
+          # a platform mismatch. The emulated cross-build is slow; correctness for
+          # someone else's cluster is worth more than our build minutes.
+          platforms: linux/arm64,linux/amd64
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/demo-app:latest
@@ -156,7 +158,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: src/ProfileAgent
-          platforms: linux/arm64
+          platforms: linux/arm64,linux/amd64
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/profile-agent:latest
@@ -179,7 +181,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: src/Broker
-          platforms: linux/arm64
+          platforms: linux/arm64,linux/amd64
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/broker:latest

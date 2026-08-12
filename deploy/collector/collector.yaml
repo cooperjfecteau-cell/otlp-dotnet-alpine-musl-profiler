@@ -83,7 +83,7 @@ data:
       resource/cluster:
         attributes:
           - key: k8s.cluster.name
-            value: "eks-arm-new"
+            value: "YOUR-CLUSTER"
             action: upsert
           - key: k8s.node.name
             value: "${env:NODE_NAME}"
