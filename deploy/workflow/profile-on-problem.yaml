@@ -18,6 +18,11 @@ description: >-
   On a Davis problem, ask the in-cluster broker to capture a 90-second profile of
   the affected service and annotate the problem with a link to the flame graph.
 
+# Must be set explicitly. The API defaults a workflow created this way to PRIVATE,
+# which hides it from the main Workflows list — it appears to have not been created
+# at all. Nothing in the response or the creation output says so.
+isPrivate: false
+
 trigger:
   eventTrigger:
     triggerConfiguration:
@@ -52,12 +57,24 @@ tasks:
       method: POST
       headers:
         Content-Type: application/json
-        # Read from the credential vault rather than inlined. A workflow definition
-        # is readable by anyone who can open the workflow, and this secret authorises
-        # spending money on ingest.
-        # Dynatrace assigns the vault id; it is not derived from the credential name,
-        # so this cannot be predicted and must be filled in after creating it.
-        X-Broker-Token: "{{ credential_vault('CREDENTIALS_VAULT-69A2C75190942059').token }}"
+      # Structured credential reference, NOT a template expression in a header.
+      #
+      # `{{ credential_vault(...) }}` fails with "Undefined variables:
+      # credential_vault" — that function only exists inside a Run JavaScript action.
+      # The HTTP action reads the vault through this block instead, and injects it
+      # into the standard Authorization header. It cannot populate a custom header,
+      # which is why the broker accepts Bearer auth rather than X-Broker-Token.
+      #
+      # The vault id is assigned by Dynatrace and is not derived from the credential
+      # name, so it must be filled in after creating the credential.
+      #
+      # The credential itself must permit this caller: scope AppEngine, app access
+      # Workflows, and owner-or-actor access. A correctly referenced credential the
+      # workflow is not allowed to read fails the same way a missing one does.
+      credential:
+        type: token
+        tokenPrefix: Bearer
+        credentialId: CREDENTIALS_VAULT-69A2C75190942059
       payload: |
         {
           "service": "dotnet-profiler-demo",

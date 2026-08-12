@@ -109,6 +109,25 @@ bool Authorised(HttpRequest http)
 {
     if (allowAnonymous) return true;
     if (string.IsNullOrEmpty(sharedSecret)) return false;
+
+    // Standard bearer auth is the primary form, because it is the only one a
+    // Dynatrace workflow can supply from the credential vault. The HTTP action's
+    // structured `credential` input injects into Authorization and nowhere else —
+    // a custom header can only be populated from a Run JavaScript action, which
+    // means hand-rolling the request and losing the vault integration.
+    if (http.Headers.TryGetValue("Authorization", out var auth))
+    {
+        var value = auth.ToString();
+        const string prefix = "Bearer ";
+        if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+            CryptographicEquals(value[prefix.Length..], sharedSecret))
+        {
+            return true;
+        }
+    }
+
+    // Retained for curl and scripted callers, which have no reason to care about
+    // the vault.
     return http.Headers.TryGetValue("X-Broker-Token", out var v) &&
            CryptographicEquals(v.ToString(), sharedSecret);
 }
