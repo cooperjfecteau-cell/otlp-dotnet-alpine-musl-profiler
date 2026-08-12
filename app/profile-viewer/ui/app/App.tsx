@@ -91,6 +91,18 @@ export function App() {
     return { ebpf: set.has("ebpf"), eventpipe: set.has("eventpipe") };
   }, [flameRows]);
 
+  // The EventPipe sidecar is attached per pod, so an eBPF-only session is a normal
+  // shape, not a failure — it is what every pod without the sidecar produces. Without
+  // this, the toggle stays on its EventPipe default, the button is disabled but still
+  // selected, and the graph renders blank: the empty-state copy below keys on the whole
+  // result set, which is not empty. Prefer EventPipe when it is there, fall back when
+  // it is not, and leave a user's explicit choice alone.
+  useEffect(() => {
+    if (sourcesPresent[source]) return;
+    if (sourcesPresent.eventpipe) setSource("eventpipe");
+    else if (sourcesPresent.ebpf) setSource("ebpf");
+  }, [sourcesPresent, source]);
+
   const fmt = new Intl.NumberFormat();
   const loading = summary.isLoading || flame.isLoading;
 
