@@ -391,13 +391,30 @@ creation and cannot be reassigned afterwards.
 
 ## What it costs
 
-Measured, at published list rates. Substitute your own rate card.
+> **These are Dynatrace data costs only** — log ingest, retention and query, at DPS published
+> list rates (`$0.20`/GiB ingest, `$0.0007`/GiB-day retain, `$0.0035`/GiB scanned). Substitute
+> your own rate card. **They are not the total cost of running this.** See
+> [what is not included](#what-these-numbers-exclude) below.
 
-| Scenario | Approximate |
+| Scenario | Dynatrace data cost |
 |---|---|
 | One 90-second profile, one pod | **$0.0006** |
 | 100-pod fleet snapshot | **$0.06** |
 | Continuous, 10 pods, 30 days | **~$26** |
+
+### What these numbers exclude
+
+| Excluded | Roughly |
+|---|---|
+| **The x86 node for EdgeConnect** | ~$15/month for a `t3.small` on-demand. Only needed if you want the workflow trigger on an arm64 cluster. |
+| **Compute the profiler consumes** | The collector DaemonSet requests 100m CPU / 256Mi per node; each profiled pod adds a `dotnet-monitor` and an agent sidecar (50m / 128Mi each). On a busy node this is real capacity, not rounding. |
+| **EventPipe's memory against your app** | `BufferSizeInMB` is charged to the *application* container. Budget for it in the app's limit, or profiling will OOMKill the workload. |
+| **Your existing cluster** | EKS control plane, nodes, EBS, data transfer — you were paying these anyway; only the x86 node above is incremental. |
+| **CI** | Multi-arch container builds. Free on public GitHub repos, billed against your plan on private ones. |
+| **Any Dynatrace licensing** beyond data | Host units, OneAgent, or whatever else your contract covers. |
+
+The honest summary: **the Dynatrace data cost is small and the compute overhead is the part
+worth watching**, particularly the sidecar memory charged against your application.
 
 **Ingest is ~94% of the bill.** The two levers that matter:
 

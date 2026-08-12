@@ -54,7 +54,7 @@ From a single workflow click, on .NET 9 / Alpine / arm64:
 | Samples parsed | 2.88M, **zero** unresolved stacks |
 | GC | 594 collections, by generation and reason |
 | Lock contention | 7,998 waits → 97 call paths, top entry named exactly |
-| Cost | ~$0.0006 per 90-second single-pod profile |
+| Dynatrace data cost | ~$0.0006 per 90-second single-pod profile ([what that excludes](docs/GETTING_STARTED.md#what-these-numbers-exclude)) |
 
 ## Repository layout
 
