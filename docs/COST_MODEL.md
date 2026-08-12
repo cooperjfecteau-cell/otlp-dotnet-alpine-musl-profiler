@@ -6,6 +6,9 @@ fleet before deploying anything.
 There is an [interactive version of this model](#interactive-calculator) if you would rather move
 sliders than do arithmetic.
 
+**To fill in the inputs for a real environment, see [DISCOVERY.md](DISCOVERY.md)** — most of them
+are countable facts rather than estimates, and it says which ones are worth the effort.
+
 > **Superseding an earlier estimate.** Earlier drafts of `GETTING_STARTED.md` quoted **$0.0006**
 > per 90-second single-pod profile. That was a pre-deployment estimate. Measuring the real records
 > after the pipeline was running gives **$0.0025** — about **4× higher**. The measured number is

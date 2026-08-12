@@ -1,0 +1,21 @@
+// DISCOVERY: what runtimes does Dynatrace already see in this environment?
+//
+// Use this to size the .NET estate — but read the caveat before trusting a zero.
+//
+// CAVEAT, and it is the whole reason this project exists: process-group
+// technology detection comes from OneAgent, and OneAgent's .NET detection on
+// Alpine/musl is exactly the blind spot this pipeline fills. A musl .NET
+// workload can legitimately report as LIBC, CONTAINERD, or nothing at all.
+//
+//   A zero here is NOT evidence that you have no .NET on Alpine.
+//   It is weak evidence that you do.
+//
+// Confirm from the cluster side instead — see docs/DISCOVERY.md, "Count the pods".
+//
+// softwareTechnologies is an array of "type:X,edition:Y,version:Z" strings, so it
+// needs expanding and splitting before it groups.
+fetch dt.entity.process_group, from:-30d
+| expand tech = softwareTechnologies
+| fieldsAdd tech = splitString(tech, ",")[0]
+| summarize process_groups = countDistinctExact(id), by:{tech}
+| sort process_groups desc

@@ -1,0 +1,20 @@
+// DISCOVERY: how many profiling sessions per pod per day should you expect?
+//
+// Sessions are triggered by Davis problems, so the historical problem rate on a
+// workload IS the sessions/day input to the cost model. Do not guess it.
+//
+// Deduped on event.id because dt.davis.problems appends a record per state
+// transition; counting rows inflates the rate. Duplicates are filtered for the
+// same reason.
+//
+// Typical output on a healthy workload is 0.1-0.3/day. A workload above ~2/day
+// is telling you something about the workload, not about profiling cost.
+fetch dt.davis.problems, from:-30d
+| filter not(dt.davis.is_duplicate)
+| fieldsAdd workload = arrayFirst(k8s.workload.name),
+            namespace = arrayFirst(k8s.namespace.name)
+| filter isNotNull(workload)
+| summarize problems = countDistinctExact(event.id), by:{namespace, workload}
+| fieldsAdd sessions_per_day = round(problems / 30.0, decimals: 2)
+| sort problems desc
+| limit 25
