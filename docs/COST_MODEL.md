@@ -3,8 +3,6 @@
 A parameterized model for what this pipeline costs to run, so you can scope it against your own
 fleet before deploying anything.
 
-There is an [interactive version of this model](#interactive-calculator) if you would rather move
-sliders than do arithmetic.
 
 **To fill in the inputs for a real environment, see [DISCOVERY.md](DISCOVERY.md)** — most of them
 are countable facts rather than estimates, and it says which ones are worth the effort.
