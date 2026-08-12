@@ -238,6 +238,55 @@ containers:
 > startup waiting for a diagnostic client — turning a sidecar crashloop into an application
 > outage.
 
+### Which pods should carry the sidecar?
+
+**Not all of them.** This is the single most expensive decision in the deployment, and the
+default answer is a small subset.
+
+The two halves of the pipeline are independent. The eBPF profiler is a DaemonSet — one per
+**node**, no sidecar, no application change — and it is the half that resolves **managed frames
+at 100%**. The EventPipe sidecars are per **pod**, and what they add on top is GC by generation
+and reason, lock contention weighted by time blocked, and line numbers. Everything else you see
+in a flame graph, you get without them.
+
+So the intended posture is **eBPF fleet-wide, sidecars on a profiling-target tier.** A session
+captured on a pod with no sidecar is a normal, supported shape, not a degraded one — the viewer
+detects which halves are present and opens on one that has records.
+
+The arithmetic matters because the sidecars are resident. The session gate decides whether an
+attached sidecar *captures*; it cannot attach one. So a pod carrying the sidecar reserves
+100m CPU / 256Mi for as long as it exists, whether or not it is ever profiled — about
+**$2.45/pod/month**, or $29.40/pod/year, on a 2 vCPU / 8 GiB node at $49/month:
+
+| Pods carrying the sidecar | Per year |
+|---:|---:|
+| 50 | $1,470 |
+| 500 | $14,700 |
+| 1,700 | ~$50,000 |
+
+Attaching to everything is how a cheap pipeline becomes an expensive one. Attaching to fifty is
+not a compromise — it is the design.
+
+Three things to check before you scale that number in either direction:
+
+- **Requests are not measured.** 100m / 256Mi are the declared requests in
+  `deploy/demo-app/demo-app.yaml`, chosen conservatively, not observed usage. These containers
+  are idle between captures. Run `kubectl top pod <pod> --containers` idle and during a session
+  before you multiply anything by your fleet size. CPU is compressible, so a lower CPU request
+  costs you only throttling during the 90-second capture; memory is not, so do not trim the
+  memory request below the real working set.
+- **A request is only a bill if the cluster is request-bound.** The model prices 100m as though
+  it converts straight into purchased capacity, which is true when the autoscaler is scaling on
+  unschedulable pods and false when there is headroom. Check with
+  `kubectl describe nodes | grep -A6 "Allocated resources"` — if CPU requests sit at 45%, the
+  first tranche of sidecars is already paid for.
+- **Attachment is a deploy-time choice, not a runtime one.** The app container's env changes, so
+  adding or removing the sidecar restarts the pod. Don't plan to attach during an incident;
+  attach to a tier ahead of time and rotate.
+
+See [COST_MODEL.md](COST_MODEL.md) for the full model — `N` there means pods *carrying the
+sidecar*, never fleet size.
+
 ---
 
 ## Step 7 — Deploy the broker

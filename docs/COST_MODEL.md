@@ -60,7 +60,7 @@ treat this as ±20%, not as an invoice.
 
 | Symbol | Meaning | Default |
 |---|---|---|
-| `N` | Pods carrying the sidecar | — |
+| `N` | Pods **carrying the sidecar** — a chosen subset, never fleet size ([why](GETTING_STARTED.md#which-pods-should-carry-the-sidecar)) | — |
 | `S` | Sessions per pod per day | — |
 | `D` | Session length, seconds | 90 |
 | `H` | eBPF sample rate, Hz | 19 |
@@ -206,6 +206,35 @@ Two things this changes about how you scope:
 Query cost sits outside this entirely — it scales with views and retention, not pods, and
 unbounded it can exceed both other lines at any scale. See lever 3 below.
 
+### The one number that does scale with fleet size
+
+Everything above says data cost stays small. The corollary is that **the sidecar's resident
+compute is the only term that grows without bound**, because it is charged per pod for as long as
+the pod exists — the session gate decides whether an attached sidecar *captures*, not whether it
+is attached.
+
+At $2.45/pod/month that is invisible at 50 pods and $50,000/year at ~1,700:
+
+| Pods carrying the sidecar | Per year |
+|---:|---:|
+| 50 | $1,470 |
+| 500 | $14,700 |
+| 1,700 | ~$50,000 |
+
+If a figure like the bottom row appears in a scoping conversation, the arithmetic is not the
+problem — the premise is. It assumes a sidecar on every .NET pod, and the design does not ask for
+that: eBPF runs fleet-wide as a DaemonSet and already resolves managed frames at 100%. See
+[which pods should carry the sidecar](GETTING_STARTED.md#which-pods-should-carry-the-sidecar).
+
+Two corrections to apply before quoting any such number:
+
+- **It over-states if the cluster has headroom.** The model prices 100m of CPU *request* as if it
+  converts 1:1 into purchased capacity. That holds only when the autoscaler is scaling on
+  unschedulable pods. Check actual request utilization first.
+- **It under-states if you raise the app's memory *request* for the EventPipe buffer.** Raising
+  only the *limit*, as `demo-app.yaml` does, costs nothing at schedule time. Raising the request
+  adds ~$0.77/pod/month.
+
 ## The four levers, in order of leverage
 
 1. **Session gating.** On-demand vs always-on is 240×. It is already built; do not disable it.
@@ -220,6 +249,21 @@ unbounded it can exceed both other lines at any scale. See lever 3 below.
 
 Note the ordering: three of the four are configuration you set once, and none of them trade
 against fidelity except the last.
+
+### And two compute levers, which matter more
+
+Those four govern the Dynatrace bill, which is ~4% of the total. The two that govern the other
+96%:
+
+1. **Attach the sidecar selectively.** Far and away the largest number in this document. Per-pod
+   compute is the only term that grows without bound, so the count of sidecar-carrying pods sets
+   the ceiling on the whole deployment. eBPF fleet-wide plus fifty targeted pods is the intended
+   shape.
+2. **Right-size the sidecar requests.** 100m / 256Mi are conservative declarations, not
+   measurements — these containers idle between captures. Dropping CPU to 50m makes memory the
+   binding dimension and cuts per-pod cost by 37%, at the price of throttling during the capture
+   itself. Measure with `kubectl top pod <pod> --containers` before and during a session; this is
+   the highest-value unmeasured input in the model.
 
 ---
 
@@ -245,6 +289,11 @@ Read these before quoting a number to anyone.
 - **`F = 10` for unscoped collection is an order-of-magnitude judgement**, not a measurement. It
   depends entirely on what else runs on your nodes.
 - **Byte counts are approximated** as folded-stack length + 400, per the caveat above.
+- **Sidecar compute is priced from declared requests, not observed usage.** 100m / 256Mi per pod
+  is what the manifests reserve; nothing here measures what the containers actually consume, and
+  they are idle between captures. Since this is the term that dominates the total *and* the one
+  that scales with fleet size, it is the most valuable thing in this document to replace with a
+  measurement.
 - **The baseline is one workload.** A service with deeper stacks, more threads, or heavier
   contention will produce more per session. Re-measure with the DQL above once you have real
   traffic — it takes one session to replace every number here with your own.

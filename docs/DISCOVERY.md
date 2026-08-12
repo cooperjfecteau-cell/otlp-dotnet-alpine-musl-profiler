@@ -195,7 +195,7 @@ fetch logs, from:-15m
 | `nodes`, `node_vCPU`, `node_GiB` | `kubectl get nodes` | Step 1 |
 | `node_$` | Cloud bill, at your effective rate | Step 1 |
 | EdgeConnect node needed? | Node `ARCH` — arm64 means yes | Step 1 |
-| `N` pods profiled | `kubectl get pods` + musl confirmation | Step 1 |
+| `N` pods carrying the sidecar | A decision, not a count — `kubectl get pods` + musl confirmation bounds it, but you choose a target tier, never the whole fleet ([why](GETTING_STARTED.md#which-pods-should-carry-the-sidecar)) | Step 1 |
 | `S` sessions/pod/day | `discover-problem-rate.dql` | Step 2 |
 | `session_MiB` | One pilot session | Step 3 |
 | `F` scope factor | Config choice; measurable in Step 3 | Step 3 |
