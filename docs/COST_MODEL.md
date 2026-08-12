@@ -248,17 +248,6 @@ Read these before quoting a number to anyone.
   contention will produce more per session. Re-measure with the DQL above once you have real
   traffic — it takes one session to replace every number here with your own.
 
----
-
-## Interactive calculator
-
-An interactive version of this model, with these defaults pre-loaded:
-
-**https://claude.ai/code/artifact/f64f0b68-745b-444a-a3c7-893a9d8bdbd3**
-
-Same formula, same measured baselines, with the query and scope warnings wired to fire on the
-conditions that actually cost money.
-
 > The page is **private by default** — if you are handing this repo to someone else, either share
 > it from the page's share menu or ignore the link, since every formula it uses is written out
 > above.
