@@ -12,6 +12,7 @@ not a demo: every claim below was measured on a live cluster.
 |---|---|
 | **[Getting started](docs/GETTING_STARTED.md)** | The happy path. Follow it top to bottom. |
 | **[Lessons learned](docs/LESSONS_LEARNED.md)** | Everything that surprised us. Read it when something behaves oddly — most failures here are silent, and several error messages point away from the cause. |
+| **[Cost model](docs/COST_MODEL.md)** | What it costs, as a formula you can point at your own fleet. Measured, not estimated. |
 
 ## What it does
 
@@ -54,7 +55,7 @@ From a single workflow click, on .NET 9 / Alpine / arm64:
 | Samples parsed | 2.88M, **zero** unresolved stacks |
 | GC | 594 collections, by generation and reason |
 | Lock contention | 7,998 waits → 97 call paths, top entry named exactly |
-| Dynatrace data cost | ~$0.0006 per 90-second single-pod profile ([what that excludes](docs/GETTING_STARTED.md#what-these-numbers-exclude)) |
+| Dynatrace data cost | ~$0.0025 per 90-second single-pod profile — and ~4% of the total bill ([cost model](docs/COST_MODEL.md)) |
 
 ## Repository layout
 

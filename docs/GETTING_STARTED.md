@@ -398,9 +398,16 @@ creation and cannot be reassigned afterwards.
 
 | Scenario | Dynatrace data cost |
 |---|---|
-| One 90-second profile, one pod | **$0.0006** |
-| 100-pod fleet snapshot | **$0.06** |
-| Continuous, 10 pods, 30 days | **~$26** |
+| One 90-second profile, one pod | **$0.0025** |
+| 100-pod fleet snapshot, one profile each | **$0.25** |
+| 10 pods, 4 sessions/day, 7-day retention, 30 days | **~$3** |
+| The same 10 pods profiled *continuously* | **~$742/month** |
+
+These are measured, not estimated — 12.3 MiB per 90-second session per pod, averaged over four
+real captures. To scope your own fleet, use the **[cost model](COST_MODEL.md)**: it gives the
+formula, the inputs, and an interactive calculator.
+
+That last row is the argument for the session gate. Always-on collection is **240×** on-demand.
 
 ### What these numbers exclude
 
@@ -414,7 +421,9 @@ creation and cannot be reassigned afterwards.
 | **Any Dynatrace licensing** beyond data | Host units, OneAgent, or whatever else your contract covers. |
 
 The honest summary: **the Dynatrace data cost is small and the compute overhead is the part
-worth watching**, particularly the sidecar memory charged against your application.
+worth watching**, particularly the sidecar memory charged against your application. At the 10-pod
+scope above, the Dynatrace bill is **~4% of the total** — the rest is the collector, the sidecars,
+and the x86 EdgeConnect node. [Full breakdown](COST_MODEL.md#worked-scenarios).
 
 **Ingest is ~94% of the bill.** The two levers that matter:
 
