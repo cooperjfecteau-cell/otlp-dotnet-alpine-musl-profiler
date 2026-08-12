@@ -11,6 +11,62 @@ If you are adopting this, skim the headings. You will meet most of them.
 
 ---
 
+## Read this first: everything here is point-in-time
+
+**All findings verified 2026-08-11/12** against the exact versions below. Several are
+version-specific and *will* stop being true. Treat every claim as "was true on this date, with
+these versions" rather than as a permanent property of the software.
+
+| Component | Version verified against |
+|---|---|
+| Kubernetes (EKS) | `1.31.14-eks-8f14419` |
+| Node OS / kernel | Amazon Linux 2023.12.20260710, kernel `6.1.176-221.360.amzn2023.aarch64` |
+| Container runtime | containerd `2.2.4` |
+| Node architecture | arm64 (Graviton `t4g.large`), plus one amd64 `t3.small` |
+| OpenTelemetry Collector | `0.158.0` (pdata `v1.64.0`) |
+| eBPF profiler | `go.opentelemetry.io/ebpf-profiler v0.0.202632` |
+| Elastic profiling metrics connector | `v0.67.0` |
+| EdgeConnect | `v1.744.0` |
+| .NET | SDK/runtime `9.0` (`9.0.18` observed), Alpine `3.23.5`, musl `1.2.5` |
+| dotnet-monitor | `10.0.3` |
+| TraceEvent | `3.2.5` |
+| OpenTelemetry .NET SDK | `1.10.0` |
+| opentelemetry-proto (profiles) | `v1.10.0` — package `…profiles.v1development`, **Alpha** |
+| dtctl | `0.37.0` |
+| dt-app / Strato | `1.13.1` / `strato-components 3.9.0` |
+| Dynatrace | SaaS tenant, Grail, OpenPipeline |
+
+### The claims most likely to expire
+
+Check these before relying on them. Each is a vendor decision that could change without notice,
+and several are things we would *expect* to change:
+
+| Claim | Why it may not hold |
+|---|---|
+| **Dynatrace does not ingest OTLP profiles** | The profiles signal reached public Alpha in March 2026. When Dynatrace supports it natively, most of this pipeline's reason for existing goes away — the schema deliberately mirrors the OTLP model so migration is a transport change. |
+| **EdgeConnect is amd64-only** | An arm64 image could appear at any release. Check the manifest list before adding an x86 node group for it. |
+| **dotnet-monitor has no musl image** | None since 7.3.4. Microsoft could resume publishing one. |
+| **Attributes truncate at 32,768 characters** | A platform limit, not a documented contract. Re-measure rather than assume — the method is in `research/27-attribute-vs-body-limits.md`. |
+| **The four UI-only operations** | These are IAM/API surface decisions. Dynatrace may open them to tokens. |
+| **The OTLP endpoint is protobuf-only** | JSON support could be added. |
+| **Workflow expression behaviour** | `credential_vault()`, `event()` on manual runs, `categories` shape, default-private — all undocumented behaviours we found empirically. Most likely category to drift. |
+| **`profiles.v1development`** | Every message in the proto is marked Alpha. Field names can still move; that is why every record carries `profile.schema_version`. |
+
+### What is durable
+
+These are properties of the platforms rather than of a release, and should outlive the versions
+above:
+
+- Alpine strips binaries, so native frames cannot symbolize without published debuginfo.
+- Wall-clock sampling includes parked threads, so raw sample weight is not CPU time.
+- `ContentionStop` carries duration and `ContentionStart` carries the stack — an ETW/EventPipe
+  event-model property.
+- A log record cannot select its own storage bucket; routing is a pipeline concern.
+- Silent truncation, silent queue drops, and silent config rejection are the dominant failure
+  mode of this whole stack. **Reconcile what you published against what landed.**
+
+---
+
 ## Profiling semantics
 
 ### eBPF resolves managed .NET frames on Alpine/musl — fully

@@ -34,7 +34,18 @@ Profile data arrives as **OTLP logs**, because Dynatrace does not ingest the Ope
 profiles signal yet — the schema mirrors the OTLP profiles data model so that when it does,
 migrating is a transport change rather than a re-model.
 
-## Verified, not asserted
+## Verified, not asserted — on 2026-08-11/12
+
+Everything below was measured on a live cluster on that date, against Collector `0.158.0`,
+eBPF profiler `v0.0.202632`, .NET `9.0` on Alpine `3.23`, dotnet-monitor `10.0.3`, and
+EdgeConnect `v1.744.0`. **Several findings are version-specific and will expire** — the full
+version table, and which claims are expected to age, is at the top of
+[LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md#read-this-first-everything-here-is-point-in-time).
+
+Most importantly: this exists because **Dynatrace does not ingest the OpenTelemetry profiles
+signal**, which reached public Alpha in March 2026. If that has changed, most of this pipeline
+is unnecessary — the schema mirrors the OTLP profiles model so migration is a transport change.
+Check first.
 
 From a single workflow click, on .NET 9 / Alpine / arm64:
 

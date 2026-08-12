@@ -9,6 +9,31 @@ we hit has an error message that points somewhere other than the cause.
 
 **Time**: about two hours the first time, most of it waiting for builds and Kubernetes.
 
+> ### Verified 2026-08-11/12 — versions matter here
+>
+> This guide was written against specific versions, and several instructions depend on
+> behaviour that could change. **Check these before assuming a step is wrong on your side.**
+>
+> | | |
+> |---|---|
+> | Kubernetes | EKS `1.31`, AL2023 kernel `6.1.176`, containerd `2.2.4` |
+> | Collector | `0.158.0`, eBPF profiler `v0.0.202632` |
+> | .NET | `9.0` on Alpine `3.23`, musl `1.2.5` |
+> | dotnet-monitor | `10.0.3` — **no musl image exists**; glibc sidecar is intentional |
+> | EdgeConnect | `v1.744.0` — **amd64 only**, needs an x86 node on Graviton |
+> | TraceEvent | `3.2.5` |
+> | dtctl / dt-app | `0.37.0` / `1.13.1` |
+> | OTLP profiles proto | `v1.10.0`, package `v1development`, **Alpha** |
+>
+> **The single biggest assumption**: Dynatrace does not ingest the OpenTelemetry profiles
+> signal, which is the entire reason profile data arrives here as logs. The signal reached
+> public Alpha in March 2026. If Dynatrace now supports it natively, **most of this pipeline
+> is unnecessary** — the record schema deliberately mirrors the OTLP profiles model so that
+> migrating is a transport change rather than a redesign. Check before you build.
+>
+> Full provenance, including which findings are expected to expire and which are durable, is
+> in [LESSONS_LEARNED.md](./LESSONS_LEARNED.md#read-this-first-everything-here-is-point-in-time).
+
 ---
 
 ## What you get
