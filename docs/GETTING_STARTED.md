@@ -307,16 +307,39 @@ npm install
 npm rebuild esbuild "@swc/core"     # npm 11 gates postinstall scripts
 ```
 
-Edit `app.config.json`: set `environmentUrl` to your tenant. Then:
+`app.config.json` ships with `environmentUrl` set to a placeholder, so either edit it or pass
+the target on the command line:
 
 ```bash
-npx dt-app deploy
+npx dt-app deploy --environment-url https://<tenant>.apps.dynatrace.com
 ```
 
 > **Bump `version` on every deploy.** Redeploying the same version with changed content fails
 > with *"same version is already installed with a different checksum"*.
 
 Open it, pick a session, and you should see a flame graph.
+
+### Dynatrace Assist
+
+The viewer includes an **"Explain this profile"** trigger that opens Dynatrace Assist with a
+prompt built from the session's measured numbers — thread count, parked share, GC and lock
+totals, and the heaviest frames by name.
+
+It follows the [AI presence pattern](https://developer.dynatrace.com/design/patterns/ai-presence/):
+`AiIcon` prefix, imperative label, and the required disclaimer shown next to the trigger
+rather than in a footer, so it is read before the click.
+
+Two things worth keeping if you modify it:
+
+- **The prompt carries the numbers rather than asking Assist to fetch them**, and explicitly
+  warns that sampled thread-time is wall-clock across all threads. Without that warning a model
+  will confidently explain why "3,039,036 ms of CPU" occurred in a 220-second window — a
+  contradiction that does not exist.
+- **`execute: false`** so the question is visible before it runs. An AI trigger that fires
+  immediately removes the moment where someone notices the prompt is wrong.
+
+Requires the Assist app (`dynatrace.davis.copilot`) to be installed. If it is not, the platform
+offers whatever app can handle a prompt rather than failing.
 
 ---
 

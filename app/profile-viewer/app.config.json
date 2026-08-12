@@ -2,7 +2,7 @@
   "environmentUrl": "https://YOUR-TENANT.apps.dynatrace.com/",
   "app": {
     "name": "Profile Viewer",
-    "version": "0.1.2",
+    "version": "0.2.0",
     "description": "Flame graphs for .NET profiling sessions on Alpine/musl containers.",
     "id": "my.profiler.viewer",
     "scopes": [

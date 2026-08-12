@@ -20,6 +20,8 @@ import {
 } from "./dql";
 import { buildFlame } from "./flame";
 import { FlameGraph } from "./components/FlameGraph";
+import { AI_DISCLAIMER, askAssist, buildPrompt } from "./assist";
+import { AiIcon } from "@dynatrace/strato-icons";
 
 type Source = "eventpipe" | "ebpf";
 
@@ -191,7 +193,42 @@ export function App() {
             <Button variant="default" onClick={() => setSessionId("")}>
               Change session
             </Button>
+
+            {/* AI trigger, per the AI presence pattern: AiIcon prefix, and the
+                label reads "[imperative verb] [object]". Disabled until there is
+                actually a profile to reason about — offering AI over an empty
+                graph invites a confidently wrong answer about nothing. */}
+            <Button
+              variant="default"
+              onClick={() =>
+                askAssist(
+                  buildPrompt(
+                    sessionId,
+                    stats,
+                    cpuGraph,
+                    cpuGraph.total + cpuGraph.parkedWeight > 0
+                      ? cpuGraph.parkedWeight / (cpuGraph.total + cpuGraph.parkedWeight)
+                      : 0
+                  )
+                )
+              }
+              disabled={flameRows.length === 0}
+            >
+              <Button.Prefix>
+                <AiIcon />
+              </Button.Prefix>
+              Explain this profile
+            </Button>
           </Flex>
+
+          {/* Required wherever AI output is offered. Kept next to the trigger
+              rather than buried in a footer, so it is read before the click and
+              not after. */}
+          {flameRows.length > 0 && (
+            <Text style={{ color: Colors.Text.Neutral.Subdued, fontSize: 12 }}>
+              {AI_DISCLAIMER}
+            </Text>
+          )}
 
           {/* Hidden loudly, never silently: parked weight is exactly what a latency
               investigation wants when the answer is "everything was waiting". */}
