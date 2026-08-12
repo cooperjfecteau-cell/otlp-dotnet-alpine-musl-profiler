@@ -1,0 +1,53 @@
+# Traffic generator for the demo workload.
+#
+# Drives all five endpoint shapes so a profile has structure worth looking at.
+# Deliberately not a load *test*: there is no ramp, no target RPS, and no latency
+# assertion. Its only job is to make the four hotspot shapes visible in a profile,
+# and it is sized so a 90-second capture has enough samples to be meaningful
+# without saturating the node.
+#
+# Two replicas so the lock endpoint actually contends -- with one caller the lock
+# is uncontended and /lock produces nothing to see, which made the contention
+# pipeline look broken when it was not.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen
+  namespace: dotnet-profiler
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: loadgen
+  template:
+    metadata:
+      labels:
+        app: loadgen
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: curl
+          image: curlimages/curl:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              while true; do
+                # Deep call chain -- the frames that prove managed unwinding works.
+                curl -s -m 30 "http://dotnet-profiler-demo/deep?iterations=120000" > /dev/null
+                # Pure CPU, no allocation: should dominate an on-CPU flame graph.
+                curl -s -m 30 "http://dotnet-profiler-demo/cpu?iterations=200000" > /dev/null
+                # Allocation churn -- shows up as GC pressure, not as CPU.
+                curl -s -m 30 "http://dotnet-profiler-demo/alloc?megabytes=48" > /dev/null
+                # Contended lock -- the signal eBPF structurally cannot produce.
+                curl -s -m 30 "http://dotnet-profiler-demo/lock?threads=8" > /dev/null
+                # Control: should be conspicuously ABSENT from a CPU flame graph.
+                # A profiler that shows this burning CPU is lying.
+                curl -s -m 30 "http://dotnet-profiler-demo/io?delayMs=100" > /dev/null
+              done
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
