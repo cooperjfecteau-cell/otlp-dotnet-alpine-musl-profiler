@@ -164,6 +164,44 @@ always-on, and the reason the gate fails *closed* when the session ConfigMap is 
 
 ---
 
+## Which line item wins as you scale
+
+Compute and ingest both scale linearly with pod count, so **pod count never decides which one
+dominates** — it cancels out. Per profiled pod, per month:
+
+```
+ingest  = S × (session_MiB/1024) × 30.4 × P_i
+compute = sidecar_frac × node_$        ≈ 0.1 vCPU × ($/vCPU-month)
+```
+
+That compute figure is ~**$2.45/pod/month** and barely moves with instance choice: a node with 4×
+the vCPU shrinks `sidecar_frac` by 4× and costs about 4× more, so the two cancel. Treat it as
+"0.1 vCPU at your cluster's rate."
+
+Setting the two equal gives the crossover, which depends only on **duty cycle, sample rate and
+scope**:
+
+| Configuration | Ingest overtakes compute at |
+|---|---:|
+| 19 Hz, scoped *(default)* | ~34 sessions/pod/day |
+| 99 Hz, scoped | ~9 |
+| 19 Hz, unscoped | ~5 |
+| 99 Hz, unscoped | ~1 |
+
+34 sessions of 90 seconds is ~50 minutes of profiling per pod per day — a **3.5% duty cycle**. At
+the intended use, a handful of problem-triggered captures a day, **compute runs about 8× the data
+cost**, and stays there however many pods you add.
+
+Two things this changes about how you scope:
+
+- **The EdgeConnect node is a small-deployment tax, not a scaling cost.** Flat $49/month means
+  58% of the bill at 10 pods and rounding error at 500. Don't extrapolate from it.
+- **Sample rate and scope move the crossover far harder than fleet size does**, and they compound:
+  unscoped at 99 Hz, ingest wins at *one* session per pod per day.
+
+Query cost sits outside this entirely — it scales with views and retention, not pods, and
+unbounded it can exceed both other lines at any scale. See lever 3 below.
+
 ## The four levers, in order of leverage
 
 1. **Session gating.** On-demand vs always-on is 240×. It is already built; do not disable it.
