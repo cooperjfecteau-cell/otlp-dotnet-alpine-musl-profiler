@@ -1,0 +1,119 @@
+# EdgeConnect: the tunnel that lets a Dynatrace workflow reach the broker.
+#
+# The broker is a ClusterIP service and stays that way. A workflow runs in the
+# Dynatrace tenant, outside the VPC, so without this there is no path between them.
+#
+# The alternative was a public ALB ingress — the AWS Load Balancer Controller is
+# already installed here, so it would have been faster. It was rejected: the
+# broker's entire purpose is to trigger billable ingest, and putting that on the
+# internet behind a bearer token is not advice this repo should give.
+#
+# EdgeConnect dials OUT to Dynatrace and holds the connection open, so nothing
+# inbound is exposed. Requests from workflow actions whose URL matches the
+# configured host pattern are transparently routed through it.
+#
+# The matching tenant-side configuration:
+#   name:         dotnet-musl-profiler
+#   hostPatterns: profiler-broker.dotnet-profiler.svc.cluster.local
+#   oauthClientId: dt0s10.GJHVMWVX
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeconnect
+  namespace: dotnet-profiler
+  labels:
+    app: edgeconnect
+spec:
+  # One replica is enough for a demo. For production Dynatrace recommends two or
+  # more: EdgeConnect is on the path of every workflow action that matches its host
+  # pattern, so losing it silently disables profiling rather than failing loudly.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edgeconnect
+  template:
+    metadata:
+      labels:
+        app: edgeconnect
+    spec:
+      # amd64, unlike every other component here.
+      #
+      # Dynatrace publishes EdgeConnect as a single-platform amd64 image — 23 tags,
+      # none arch-specific, no manifest list. On a Graviton-only cluster it fails
+      # with `exec format error`, which reads like a corrupt image rather than a
+      # platform constraint.
+      #
+      # So the cluster carries one small x86 node (`x86-edgeconnect` node group,
+      # t3.small) purely for this. That is a real cost of choosing arm64 nodes, and
+      # worth knowing before an adopter designs around EdgeConnect.
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: edgeconnect
+          image: public.ecr.aws/dynatrace/edgeconnect:latest
+          # Configured by FILE, not environment variables.
+          #
+          # The env-var route looks like it works — the binary logs
+          # "Environment variable EDGE_CONNECT_OAUTH_CLIENT_ID will be used" for each
+          # one — and then fails with `missing field 'oauth'`. It reads the flat
+          # variables but its config struct wants `oauth` as a nested object, and
+          # there is no flat spelling that satisfies it. The startup log's first
+          # line is the actual instruction: it searches `/` for YAML.
+          #
+          # The whole config lives in a Secret rather than a ConfigMap because the
+          # client secret is in it.
+          # Configured by environment, with DOUBLE underscore for nested fields.
+          #
+          # The file route was tried first and abandoned: a busybox pod with an
+          # identical mount proved the config present at `/` and world-readable under
+          # both `edgeconnect.yaml` and `edge_connect.yaml`, and EdgeConnect still
+          # logged "no yaml config files were found".
+          #
+          # Flat env vars get further but fail with `missing field 'oauth'` — the
+          # config struct nests them. `EDGE_CONNECT_OAUTH__CLIENT_ID` maps to
+          # `oauth.client_id`; single-underscore does not.
+          env:
+            - name: EDGE_CONNECT_NAME
+              value: dotnet-musl-profiler
+            - name: EDGE_CONNECT_API_ENDPOINT_HOST
+              value: YOUR-TENANT.apps.dynatrace.com
+            - name: EDGE_CONNECT_OAUTH__ENDPOINT
+              value: https://sso.dynatrace.com/sso/oauth2/token
+            - name: EDGE_CONNECT_OAUTH__CLIENT_ID
+              valueFrom:
+                secretKeyRef: { name: edgeconnect-oauth, key: oauth-client-id }
+            - name: EDGE_CONNECT_OAUTH__CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: { name: edgeconnect-oauth, key: oauth-client-secret }
+            - name: EDGE_CONNECT_OAUTH__RESOURCE
+              valueFrom:
+                secretKeyRef: { name: edgeconnect-oauth, key: oauth-client-resource }
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            # Nothing profiles this container and it needs no host access — it is a
+            # network client, not an agent. Locked down accordingly, in deliberate
+            # contrast to the profiler DaemonSet which must run privileged.
+            runAsNonRoot: true
+            # Explicit UID is required, not optional. The image declares its user by
+            # NAME (`nonroot`), and kubelet refuses to start a runAsNonRoot container
+            # it cannot numerically verify: "image has non-numeric user (nonroot),
+            # cannot verify user is non-root". 65532 is the conventional distroless
+            # nonroot uid.
+            runAsUser: 65532
+            allowPrivilegeEscalation: false
+            # Left writable deliberately: with readOnlyRootFilesystem the single-file
+            # subPath mount of the config at / did not materialise, and EdgeConnect
+            # reported "no yaml config files were found" while the mount showed
+            # present in the pod spec.
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: config
+          secret:
+            secretName: edgeconnect-config

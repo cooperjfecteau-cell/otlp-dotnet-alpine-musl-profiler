@@ -1,0 +1,70 @@
+# Closes the loop: Davis detects a problem, this asks the broker for a profile.
+#
+# Reaches the broker over EdgeConnect. The URL is a cluster-internal DNS name that
+# resolves nowhere on the public internet — the tenant-side EdgeConnect
+# configuration `dotnet-musl-profiler` has it as a host pattern, so Dynatrace routes
+# the request through the in-cluster tunnel instead of executing it directly.
+#
+# Two details that fail silently if you get them wrong:
+#
+#   - problemEventId must be the INTERNAL event id, `event()["event.id"]`, not the
+#     `P-…` display id. The wrong one is accepted and then never attaches the
+#     annotation to anything.
+#   - The broker answers 409 when the service is already being profiled. That is a
+#     normal outcome, not a failure: the existing session's annotation already
+#     carries the link this run would have produced. `isSuccess` treats it as such.
+title: Profile .NET service on problem
+description: >-
+  On a Davis problem, ask the in-cluster broker to capture a 90-second profile of
+  the affected service and annotate the problem with a link to the flame graph.
+
+trigger:
+  eventTrigger:
+    triggerConfiguration:
+      type: davis-problem
+      value:
+        # Deliberately narrow. This triggers billable ingest, so it should fire on
+        # the workload the pipeline is built around rather than on everything Davis
+        # notices.
+        #
+        # `categories` is required by the API even though the UI implies it is
+        # optional; omitting it fails with "categories: Field required".
+        # Resource and slowdown are the two that a CPU/GC/lock profile can actually
+        # explain — an availability problem is rarely a profiling question.
+        categories:
+          resource: true
+          slowdown: true
+          availability: false
+          error: false
+          custom: false
+        entityTagsMatch: all
+        entityTags:
+          app: dotnet-profiler-demo
+        onProblemClose: false
+
+tasks:
+  start_profile:
+    name: start_profile
+    description: POST to the broker over EdgeConnect
+    action: dynatrace.automations:http-function
+    input:
+      url: http://profiler-broker.dotnet-profiler.svc.cluster.local/sessions
+      method: POST
+      headers:
+        Content-Type: application/json
+        # Read from the credential vault rather than inlined. A workflow definition
+        # is readable by anyone who can open the workflow, and this secret authorises
+        # spending money on ingest.
+        # Dynatrace assigns the vault id; it is not derived from the credential name,
+        # so this cannot be predicted and must be filled in after creating it.
+        X-Broker-Token: "{{ credential_vault('CREDENTIALS_VAULT-69A2C75190942059').token }}"
+      payload: |
+        {
+          "service": "dotnet-profiler-demo",
+          "namespace": "dotnet-profiler",
+          "durationSeconds": 90,
+          "problemEventId": "{{ event()['event.id'] }}",
+          "entityId": "{{ event()['affected_entity_ids'][0] }}"
+        }
+      # 409 means "already collecting" and is a successful outcome of this workflow.
+      isSuccess: "{{ result('start_profile')['status_code'] in [202, 409] }}"

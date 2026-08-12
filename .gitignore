@@ -16,6 +16,9 @@ obj/
 node_modules/
 dist/
 
+#OAuth
+oauth/
+
 # OS
 Thumbs.db
 .DS_Store
