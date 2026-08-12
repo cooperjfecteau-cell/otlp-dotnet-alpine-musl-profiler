@@ -34,7 +34,7 @@ Profile data arrives as **OTLP logs**, because Dynatrace does not ingest the Ope
 profiles signal yet — the schema mirrors the OTLP profiles data model so that when it does,
 migrating is a transport change rather than a re-model.
 
-Everything below was measured on a live cluster on that date, against Collector `0.158.0`,
+Everything below was measured on a live cluster on **2026-08-11/12**, against Collector `0.158.0`,
 eBPF profiler `v0.0.202632`, .NET `9.0` on Alpine `3.23`, dotnet-monitor `10.0.3`, and
 EdgeConnect `v1.744.0`. **Several findings are version-specific and will expire** — the full
 version table, and which claims are expected to age, is at the top of
